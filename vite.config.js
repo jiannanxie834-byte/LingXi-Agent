@@ -10,5 +10,13 @@ export default defineConfig({
       // 🌟 核心魔法：告诉 Vite，碰到 @ 就把它替换成 src 目录的绝对路径
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000', // 转发到 Python 后端
+        changeOrigin: true
+      }
+    }
   }
 })

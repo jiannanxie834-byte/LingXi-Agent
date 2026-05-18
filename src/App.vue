@@ -1,7 +1,4 @@
 <template>
-  <UserLayout />
+  <router-view />
 </template>
 
-<script setup>
-import UserLayout from './layouts/UserLayout.vue'
-</script>
