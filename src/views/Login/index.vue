@@ -127,18 +127,27 @@ const handleLogin = async () => {
       loading.value = true
       const res = await loginAPI(loginForm.value)
       
-      //  一键交由 Pinia 统一调度状态与本地缓存
-      userStore.login(res)
+      // 必须是 200 才能放行进系统
+      if (res && res.code === 200) {
+        
+        // 把 data 盒子单独提出来，避免后面到处写 .data
+        const userData = res.data
+        
+        // 1. 一键交由 Pinia 统一调度状态与本地缓存
+        userStore.login(userData)
 
-      if (res.role === 'admin') {
-        ElMessage.success('管理员身份验证成功，进入控制台...')
-        router.push('/admin/dashboard')
-      } else {
-        ElMessage.success(`欢迎回来，${res.username}同学！`)
-        router.push('/')
+        // 2. 从拆好的 userData 盒子里去读取 role 和 username
+        if (userData.role === 'admin') {
+          ElMessage.success('管理员身份验证成功，进入控制台...')
+          router.push('/admin/dashboard')
+        } else {
+          ElMessage.success(`欢迎回来，${userData.username}同学！`)
+          router.push('/')
+        }
+        
       }
     } catch (error) {
-      console.error(error)
+      console.error('登录流程中断:', error)
     } finally {
       loading.value = false
     }
@@ -159,7 +168,7 @@ const handleRegister = async () => {
         password: registerForm.value.password
       })
       
-      ElMessage.success('🎉 注册成功！已自动为您切换到登录界面')
+      ElMessage.success(' 注册成功！已自动为您切换到登录界面')
       loginForm.value.username = registerForm.value.username
       isLoginMode.value = true 
     } catch (error) {

@@ -1,6 +1,5 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import router from '@/router'
 
 // 1. 创建 axios 实例
 const service = axios.create({
@@ -11,9 +10,9 @@ const service = axios.create({
 // 2. 请求拦截器：发请求之前，自动在请求头里带上 Token
 service.interceptors.request.use(
   config => {
-    const token = localStorage.getItem('token')
+    // 🌟 核心修复：去正确的柜子（sessionStorage）里拿 Token
+    const token = sessionStorage.getItem('token')
     if (token) {
-      // 这里的 Authorization 格式要跟你的后端商量好
       config.headers['Authorization'] = `Bearer ${token}`
     }
     return config
@@ -23,27 +22,23 @@ service.interceptors.request.use(
   }
 )
 
-// 3. 响应拦截器：后端返回数据后，统一判断有没有报错
+// 3. 响应拦截器：统一剥壳与全局错误处理 (咱们刚刚打磨的终极版)
 service.interceptors.response.use(
   response => {
     const res = response.data
-    // 假设你们后端约定的成功状态码是 200 或 20000
-    if (res.code !== 200) {
-      ElMessage.error(res.message || '系统未知错误')
 
-      // 如果后端返回 401（Token 过期或未登录），直接踢回登录页
-      if (res.code === 401) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('role')
-        router.push('/login')
-      }
-      return Promise.reject(new Error(res.message || 'Error'))
+    // 只要后端返回 200，说明业务成功，原封不动把大包裹还给组件！
+    if (res.code === 200) {
+      return res
     } else {
-      return res.data // 直接返回核心数据，页面里不用再 .data.data
+      // 后端返回了非 200 的业务报错
+      ElMessage.error(res.message || '系统遇到了一点小状况')
+      return Promise.reject(new Error(res.message || 'Error'))
     }
   },
   error => {
-    ElMessage.error(error.message || '网络请求失败')
+    console.error('网络请求崩溃:', error)
+    ElMessage.error('网络中断，请检查后端服务是否开启')
     return Promise.reject(error)
   }
 )

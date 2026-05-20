@@ -30,6 +30,19 @@
             <div class="header-right" @click.stop>
               <button class="inline-add-btn" @click="insertTask(pIndex, 0)">+ 在最前插入任务</button>
             </div>
+            <el-popconfirm 
+                title="确定要彻底销毁整条学习路线吗？此操作不可逆！" 
+                confirm-button-text="销毁" 
+                cancel-button-text="取消"
+                confirm-button-type="danger"
+                @confirm="handleDeleteRoute(plan.id)"
+              >
+                <template #reference>
+                  <el-button type="primary" plain size="small" style="margin-left: 10px;">
+                    删除
+                  </el-button>
+                </template>
+              </el-popconfirm>
           </div>
 
           <div class="timeline-container" v-show="!plan.isCollapsed">
@@ -118,95 +131,105 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useUserStore } from '@/stores/user'
+//  1. 精准导入 API 文件里真实暴露的名字
+import { getPlanListAPI, deleteRouteAPI, deleteNodeAPI } from '@/api/plan'
+import { ElMessage } from 'element-plus'
 
-// 1. 核心状态：多路线规划数组（支持任意增删折叠）
-const plans = ref([
-  {
-    id: 1,
-    title: 'Vue3 高级实战路线 (AI 专属定制)',
-    isCollapsed: false,
-    isAiGenerated: true,
-    tasks: [
-      { id: 101, title: 'Vue3 组合式 API 入门', desc: '掌握 setup, ref, reactive 等核心响应式函数。', status: 'completed', isCustom: false, resources: ['Vue3 官方文档'] },
-      { id: 102, title: '深度理解生命周期与 Watcher', desc: '分析 Hook 调用时机及侦听器高级用法。', status: 'active', isCustom: false, resources: ['生命周期流程图'] },
-      { id: 103, title: 'Vue-Router 与 Pinia 进阶', desc: '单页面应用的路由管理及全局状态管理。', status: 'pending', isCustom: false, resources: [] }
-    ]
-  },
-  {
-    id: 2,
-    title: '计算机网络体系复习冲刺',
-    isCollapsed: true, // 默认收缩
-    isAiGenerated: false,
-    tasks: [
-      { id: 201, title: 'TCP/IP 五层模型概述', desc: '理清物理层到应用层的基本职责。', status: 'completed', isCustom: false, resources: [] },
-      { id: 202, title: '三次握手与四次挥手详解', desc: '核心常考点，理解状态转移图。', status: 'pending', isCustom: false, resources: ['抓包实操案例'] }
-    ]
-  }
-])
+const userStore = useUserStore()
+const loading = ref(false)
 
-// 2. 独立自定义任务数组
+//  2. 核心状态：彻底清空写死的数据，等待后端投喂！
+const plans = ref([])
+
+// 独立自定义任务数组 (属于本地功能，暂时保留)
 const myTasks = ref([
   { id: 1, content: '完成计网第三章课后习题', done: true },
   { id: 2, content: '复习 JavaScript 异步编程', done: false }
 ])
 
-// 切换规划路线的收缩状态
+//  3. 初始化拉取：页面一加载就去轰鸣后端
+onMounted(() => {
+  fetchPlansData()
+})
+
+//  4. 重新拉取活数据的通用函数
+const fetchPlansData = async () => {
+  loading.value = true
+  try {
+    const res = await getPlanListAPI(userStore.username)
+    if (res && res.code === 200) {
+      plans.value = res.data // 修复了变量名不一致的问题
+    }
+  } catch (error) {
+    console.error('拉取路线失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+//  5. 删除整条路线
+const handleDeleteRoute = async (routeId) => {
+  try {
+    const res = await deleteRouteAPI(userStore.username, routeId)
+    if (res && res.code === 200) {
+      ElMessage.success('整条学习路线已销毁！')
+      fetchPlansData() // 删完立刻重新拉取，刷新视图
+    }
+  } catch (error) {
+    console.error('删除路线失败:', error)
+  }
+}
+
+//  6.剥离单个任务节点 (替换掉你之前的 deleteStep)
+const handleDeleteNode = async (routeId, taskId) => {
+  if (!confirm('确定要删除这条路线中的该任务吗？')) return
+  
+  try {
+    const res = await deleteNodeAPI(userStore.username, routeId, taskId)
+    if (res && res.code === 200) {
+      ElMessage.success('任务节点已成功剥离！')
+      fetchPlansData() // 删完立刻重新拉取，刷新视图
+    }
+  } catch (error) {
+    console.error('删除节点失败:', error)
+  }
+}
+
+// 切换规划路线的收缩状态 (纯前端 UI 控制，无需连后端)
 const togglePlan = (index) => {
   plans.value[index].isCollapsed = !plans.value[index].isCollapsed
 }
 
-// 【功能1】新增整条独立规划路线
+// 【提醒】新增路线和插入任务目前是纯前端操作，刷新会丢失。
+// 等 AI 接口调通后，这部分也会变成真实 API 交互！
 const createNewPlan = () => {
   const title = prompt('请输入新规划的名称:')
   if (!title || !title.trim()) return
   plans.value.push({
-    id: Date.now(),
-    title: title,
-    isCollapsed: false,
-    isAiGenerated: false,
+    id: Date.now(), title: title, isCollapsed: false, isAiGenerated: false,
     tasks: [{ id: Date.now() + 1, title: '准备开始的第一步', desc: '点击下方在此处插入新任务。', status: 'pending', isCustom: true, resources: [] }]
   })
 }
 
-// 【功能2】在规划路线的任意位置（之前/之后）“插针”插入任务
 const insertTask = (planIndex, targetStepIndex) => {
   const taskTitle = prompt('请输入你要插入的任务名称:')
   if (!taskTitle || !taskTitle.trim()) return
   const taskDesc = prompt('请输入任务描述（可选）:') || '学生自主补充的个性化学习任务。'
 
   const newTask = {
-    id: Date.now(),
-    title: taskTitle,
-    desc: taskDesc,
-    status: 'pending',
-    isCustom: true, // 标记为学生自主添加
-    resources: []
+    id: Date.now(), title: taskTitle, desc: taskDesc, status: 'pending', isCustom: true, resources: []
   }
-
-  // 使用 splice 在指定位置完美插入
   plans.value[planIndex].tasks.splice(targetStepIndex, 0, newTask)
 }
 
-// 【功能3】删除规划里的某一步
-const deleteStep = (planIndex, stepIndex) => {
-  if (confirm('确定要删除这条路线中的该任务吗？')) {
-    plans.value[planIndex].tasks.splice(stepIndex, 1)
-  }
-}
-
-// 【功能4】添加独立自定义清单任务
 const addGlobalTask = () => {
   const content = prompt('请输入待办事项:')
   if (!content || !content.trim()) return
-  myTasks.value.push({
-    id: Date.now(),
-    content: content,
-    done: false
-  })
+  myTasks.value.push({ id: Date.now(), content: content, done: false })
 }
 
-// 【功能5】彻底删除独立清单任务（右侧✕号触发）
 const deleteGlobalTask = (index) => {
   myTasks.value.splice(index, 1)
 }
@@ -216,10 +239,12 @@ const totalProgress = computed(() => {
   let total = 0
   let completed = 0
   plans.value.forEach(p => {
-    p.tasks.forEach(t => {
-      total++
-      if (t.status === 'completed') completed++
-    })
+    if(p.tasks) { // 加个容错，防止后端传来的 tasks 为空
+      p.tasks.forEach(t => {
+        total++
+        if (t.status === 'completed') completed++
+      })
+    }
   })
   return total ? Math.round((completed / total) * 100) : 0
 })

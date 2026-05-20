@@ -25,3 +25,12 @@ export function processFeedbackAPI(feedbackId) {
     params: { feedback_id: feedbackId } // 传递反馈 ID 给后端
   })
 }
+
+// 删除单条反馈
+export function deleteFeedbackAPI(feedbackId) {
+  return request({
+    url: '/admin/feedback/delete',
+    method: 'delete',
+    params: { feedback_id: feedbackId }
+  })
+}

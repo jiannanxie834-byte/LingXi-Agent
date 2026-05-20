@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard-container">
     <div class="welcome-box">
-      <h3>👑 欢迎回来，超级管理员</h3>
+      <h3> 欢迎回来，超级管理员</h3>
       <p>系统大盘数据实时通电中，当前有 <el-tag type="danger" size="small" effect="dark">{{ todoCount }}</el-tag> 项核心待办事件需要处理。</p>
     </div>
 
@@ -47,16 +47,21 @@ import { getAdminStatsAPI } from '@/api/admin'
 const statsCards = ref([])
 const todoCount = ref(0)
 
-// 🌟 核心：拉取后端全真大盘数据
+// 重新拉取大盘活数据
 const fetchDashboardData = async () => {
   try {
     const res = await getAdminStatsAPI()
-    if (res.code === 200) {
-      statsCards.value = res.data
-      todoCount.value = res.todoCount
+    
+    if (res && res.code === 200) {
+      
+      statsCards.value = res.data.cards
+      todoCount.value = res.data.todoCount
+      
+    } else {
+      console.error('大盘数据异常:', res.message)
     }
   } catch (error) {
-    console.error('管理员大盘活数据加载失败:', error)
+    console.error('大盘加载彻底失败:', error)
   }
 }
 
