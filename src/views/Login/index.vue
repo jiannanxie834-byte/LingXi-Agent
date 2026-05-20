@@ -53,7 +53,7 @@
       <div class="tips" v-if="isLoginMode">
         <p> 测试快捷通道：</p>
         <p>输入 <strong>admin</strong> / 123456 进入超级管理员</p>
-        <p>输入 <strong>其他名字</strong> / 123456 进入普通学生端</p>
+        <p>输入 <strong>student</strong> / 123456 进入普通学生端</p>
       </div>
     </el-card>
   </div>
@@ -129,22 +129,15 @@ const handleLogin = async () => {
       
       // 必须是 200 才能放行进系统
       if (res && res.code === 200) {
-        
-        // 把 data 盒子单独提出来，避免后面到处写 .data
-        const userData = res.data
-        
-        // 1. 一键交由 Pinia 统一调度状态与本地缓存
+        const userData = {
+        ...res.data,
+        token: res.token
+      }
         userStore.login(userData)
-
-        // 2. 从拆好的 userData 盒子里去读取 role 和 username
-        if (userData.role === 'admin') {
-          ElMessage.success('管理员身份验证成功，进入控制台...')
-          router.push('/admin/dashboard')
-        } else {
-          ElMessage.success(`欢迎回来，${userData.username}同学！`)
-          router.push('/')
-        }
-        
+      
+        // 无论谁登录，全部先进主系统感受业务！
+        ElMessage.success(`欢迎进入多智能体学习中枢，${userData.username}！`)
+        router.push('/') 
       }
     } catch (error) {
       console.error('登录流程中断:', error)

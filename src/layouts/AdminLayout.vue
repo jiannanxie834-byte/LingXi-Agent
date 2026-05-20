@@ -33,9 +33,20 @@
       <el-container>
         <el-header class="admin-header">
           <div class="breadcrumb">系统管理 / {{ pageTitle }}</div>
-          <div class="admin-info">
+          
+          <div class="admin-info" style="display: flex; align-items: center; gap: 15px;">
+            
+            <el-button 
+              type="primary" 
+              plain 
+              size="small"
+              @click="$router.push('/')"
+            >
+               返回学生前台
+            </el-button>
+
             <el-tag type="danger" effect="dark" class="role-tag">超级管理员</el-tag>
-            <el-button link type="primary" @click="handleLogout">退出后台</el-button>
+            <el-button link type="primary" @click="handleLogout">退出登录</el-button>
           </div>
         </el-header>
 

@@ -44,9 +44,45 @@
         </div>
 
         <div class="hero-action-buttons">
+          <el-button type="primary" plain @click="openEditDialog">修改资料</el-button>
           <el-button @click="feedbackVisible = true">问题反馈</el-button>
           <el-button type="danger" plain @click="handleLogout">退出登录</el-button>
         </div>
+        <el-dialog v-model="profileVisible" title="修改个人资料" width="450px" destroy-on-close>
+      <el-form :model="profileForm" label-width="80px" label-position="left">
+        <el-form-item label="登录账号">
+          <el-input v-model="profileForm.username" disabled />
+        </el-form-item>
+        <el-form-item label="新密码">
+          <el-input 
+            v-model="profileForm.password" 
+            type="password" 
+            show-password 
+            placeholder="留空则代表不修改密码" 
+          />
+        </el-form-item>
+        <el-form-item label="头像链接">
+          <el-input v-model="profileForm.avatar" placeholder="请输入头像图片 URL 或者是本地 Base64" />
+        </el-form-item>
+        <el-form-item label="个性签名">
+          <el-input 
+            v-model="profileForm.bio" 
+            type="textarea" 
+            :rows="2" 
+            maxlength="40" 
+            placeholder="写下你的座右铭吧..." 
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="profileVisible = false">取 消</el-button>
+          <el-button type="primary" :loading="loading" @click="handleUpdateProfile">
+            保存修改
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
       </div>
     </el-card>
 
@@ -133,16 +169,69 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import * as echarts from 'echarts' //  引入 ECharts 图表库
-import { submitFeedbackAPI } from '@/api/user'
+import * as echarts from 'echarts' 
+import { submitFeedbackAPI, updateProfileAPI } from '@/api/user'
 
 const router = useRouter()
 const userStore = useUserStore()
 
+const loading = ref(false)
+
+// =================  个人资料全栈更新内核  =================
+const profileVisible = ref(false)
+const profileForm = ref({
+  username: '',
+  password: '',
+  avatar: '',
+  bio: ''
+})
+
+// 点击“修改资料”按钮：开箱，并执行标准的数据流回显
+const openEditDialog = () => {
+  profileForm.value = {
+    username: userStore.username,
+    password: '', // 密码初始留空
+    avatar: userStore.avatar,
+    bio: userStore.bio
+  }
+  profileVisible.value = true
+}
+
+// 提交更新逻辑
+const handleUpdateProfile = async () => {
+  if (!profileForm.value.username) return
+  loading.value = true
+  try {
+    const res = await updateProfileAPI(profileForm.value)
+    
+    if (res && res.code === 200) {
+      ElMessage.success('资料同步云端成功！')
+      
+      userStore.updateBio(res.data.bio)
+      userStore.updateAvatar(res.data.avatar)
+      
+      profileVisible.value = false // 优雅关闭弹窗
+      
+      // 级联安全策略：如果改了密码，强制踢回登录页
+      if (profileForm.value.password) {
+        ElMessage.warning('检测到核心密码已变更，请重新登录！')
+        userStore.logout()
+        router.push('/login')
+      }
+    } else {
+      ElMessage.error(res.message || '更新失败')
+    }
+  } catch (error) {
+    console.error('更新资料异常:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
 // 判断当前是否是新注册的用户
 const isNewUser = computed(() => userStore.username !== 'student')
 
-// 个签编辑逻辑控制
+// =================  快捷轻量级内联更新  =================
 const isEditingBio = ref(false)
 const inputBio = ref('')
 const bioInputRef = ref(null)
@@ -155,36 +244,57 @@ const startEditBio = () => {
   })
 }
 
-const saveBio = () => {
+// 内联快捷保存个签：同样后端接口保持一致性
+const saveBio = async () => {
   isEditingBio.value = false
-  userStore.updateBio(inputBio.value.trim())
-  ElMessage.success('个签修改成功！')
+  if (inputBio.value.trim() === userStore.bio) return
+  try {
+    const res = await updateProfileAPI({
+      username: userStore.username,
+      password: '', // 不改密码
+      avatar: userStore.avatar,
+      bio: inputBio.value.trim()
+    })
+    if (res && res.code === 200) {
+      userStore.updateBio(res.data.bio)
+      ElMessage.success('个签已同步至云端！')
+    }
+  } catch (err) {
+    console.error(err)
+  }
 }
 
-// 头像本地替换
-const handleAvatarChange = (file) => {
+// 头像快捷本地上传更换：同样后端
+const handleAvatarChange = async (file) => {
   const localUrl = URL.createObjectURL(file.raw)
-  userStore.updateAvatar(localUrl)
-  ElMessage.success('头像成功与顶部同步更新！')
+  try {
+    const res = await updateProfileAPI({
+      username: userStore.username,
+      password: '',
+      avatar: localUrl,
+      bio: userStore.bio
+    })
+    if (res && res.code === 200) {
+      userStore.updateAvatar(res.data.avatar)
+      ElMessage.success('头像已实时存盘！')
+    }
+  } catch (err) {
+    console.error(err)
+  }
 }
 
-// 问题反馈
+// ================= 问题反馈业务 =================
 const feedbackVisible = ref(false)
 const feedbackContent = ref('')
 
-// profile.vue 中的 submitFeedback 函数替换为：
 const submitFeedback = async () => {
   if (!feedbackContent.value.trim()) return ElMessage.warning('内容不能为空')
-
   try {
     const res = await submitFeedbackAPI({
       username: userStore.username || 'student',
       content: feedbackContent.value
     })
-
-    // 如果 res 是 undefined（说明被拦截器剥离了），但没进 catch 就说明已经是 200 成功了！
     if (!res || res.code === 200) {
-      // 如果拦截器把整个 res 吞了，我们就用前端兜底的成功提示
       ElMessage.success(res?.message || '反馈提交成功！系统已实时呈递给最高管理员。') 
       feedbackContent.value = ''
       feedbackVisible.value = false
@@ -192,8 +302,7 @@ const submitFeedback = async () => {
       ElMessage.error(res.message || '提交失败，请重试')
     }
   } catch (error) {
-    console.error('反馈发送网络轰炸失败:', error)
-    ElMessage.error('网络中断，请检查后端 start.bat 服务是否开启')
+    console.error('反馈网络中断:', error)
   }
 }
 
@@ -204,7 +313,7 @@ const handleLogout = () => {
   router.push('/')
 }
 
-// =================  ECharts 雷达图渲染内核 =================
+// ================= ECharts 雷达图渲染内核 =================
 const radarChartRef = ref(null)
 let myChart = null
 
@@ -212,10 +321,7 @@ const initRadarChart = () => {
   if (!radarChartRef.value) return
   myChart = echarts.init(radarChartRef.value)
   
-  // 核心判定：如果是新用户，数值全设为 0（渲染出一个只保留轴线的“空雷达图”）
-  const radarData = isNewUser.value 
-    ? [0, 0, 0, 0, 0, 0] 
-    : [85, 75, 92, 88, 70, 78]
+  const radarData = isNewUser.value ? [0, 0, 0, 0, 0, 0] : [85, 75, 92, 88, 70, 78]
 
   const option = {
     radar: {
@@ -236,7 +342,6 @@ const initRadarChart = () => {
     },
     series: [{
       type: 'radar',
-      // 🌟新用户如果没有数值，连蓝色阴影区也完全隐藏，只留个空架子
       data: isNewUser.value ? [] : [{
         value: radarData,
         name: '学情全息动态画像',
@@ -251,7 +356,6 @@ const initRadarChart = () => {
 
 onMounted(() => {
   initRadarChart()
-  // 窗口缩放自适应大小
   window.addEventListener('resize', () => myChart && myChart.resize())
 })
 </script>

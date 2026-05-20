@@ -1,36 +1,22 @@
 // src/api/admin.js
 import request from '@/utils/request'
 
-// 获取管理员大盘动态数据
-export function getAdminStatsAPI() {
-  return request({
-    url: '/admin/stats',
-    method: 'get'
-  })
-}
+// 大盘统计
+export const getAdminStatsAPI = () => request({ url: '/admin/dashboard/stats', method: 'get' })
 
-// 获取所有学生反馈列表
-export function getFeedbackListAPI() {
-  return request({
-    url: '/admin/feedback/list',
-    method: 'get'
-  })
-}
+// 学生管理
+export const getAllStudentsAPI = () => request({ url: '/admin/students/list', method: 'get' })
 
-// 标记单条反馈为已处理
-export function processFeedbackAPI(feedbackId) {
-  return request({
-    url: '/admin/feedback/process',
-    method: 'post',
-    params: { feedback_id: feedbackId } // 传递反馈 ID 给后端
-  })
-}
+// 资源审核
+export const getAllResourcesAPI = () => request({ url: '/admin/resources/all', method: 'get' })
+export const approveResourceAPI = (id) => request({ url: '/admin/resources/approve', method: 'post', data: { id } })
+export const rejectResourceAPI = (id) => request({ url: '/admin/resources/reject', method: 'post', data: { id } })
 
-// 删除单条反馈
-export function deleteFeedbackAPI(feedbackId) {
-  return request({
-    url: '/admin/feedback/delete',
-    method: 'delete',
-    params: { feedback_id: feedbackId }
-  })
-}
+// 反馈管理（一键复活你的按钮事件）
+export const getAllFeedbackAPI = () => request({ url: '/admin/feedback/all', method: 'get' })
+export const processFeedbackAPI = (id) => request({ url: '/admin/feedback/process', method: 'post', data: { id } })
+export const deleteFeedbackAPI = (id) => request({ url: '/admin/feedback/delete', method: 'post', data: { id } })
+
+// 分类申请审核
+export const getAllTypesAPI = () => request({ url: '/resource/types/all', method: 'get' })
+export const approveTypeAPI = (name) => request({ url: '/admin/types/approve', method: 'post', data: { name } })

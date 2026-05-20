@@ -1,81 +1,112 @@
 <template>
-  <div class="resource-manage">
-    <el-card shadow="never" class="table-card">
-      <div class="table-toolbar">
-        <el-button type="primary">+ 上传自带标准教学资源</el-button>
-        <el-input placeholder="搜索资源名称..." style="width: 260px;" />
-      </div>
-
-      <el-table :data="resourceList" style="width: 100%" border>
-        <el-table-column prop="title" label="资源名称" min-width="180" />
-        <el-table-column prop="type" label="资源类型" width="120">
+  <div class="admin-review-page" v-loading="loading">
+    
+    <div class="section-box">
+      <h2> 初始课程知识资源审核</h2>
+      <el-table :data="resourceList" border stripe style="width: 100%; margin-top: 15px;">
+        <el-table-column prop="id" label="资源编码" width="120" align="center" />
+        <el-table-column prop="title" label="资源名称" min-width="200" />
+        <el-table-column prop="type" label="资源模态" width="180" align="center">
           <template #default="scope">
-            <el-tag>{{ scope.row.type }}</el-tag>
+            <el-tag effect="plain">{{ scope.row.type }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="uploader" label="上传者/生成者" width="140">
+        <el-table-column label="审核状态" width="120" align="center">
           <template #default="scope">
-            <span :style="{ color: scope.row.isUserUploaded ? '#fa8c16' : '#52c41a' }">
-              {{ scope.row.uploader }}
-            </span>
+            <el-tag :type="scope.row.status === '已通过' ? 'success' : 'warning'">
+              {{ scope.row.status }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="审核状态" width="120">
+        <el-table-column label="操作放行" width="180" align="center">
           <template #default="scope">
-            <el-tag :type="getStatusType(scope.row.status)">{{ getStatusText(scope.row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="time" label="提交时间" width="180" />
-        <el-table-column label="管理操作" width="200" fixed="right">
-          <template #default="scope">
-            <div v-if="scope.row.status === 'pending'">
-              <el-button type="success" size="small" @click="handleAudit(scope.$index, 'approved')">通过</el-button>
-              <el-button type="danger" size="small" @click="handleAudit(scope.$index, 'rejected')">驳回</el-button>
-            </div>
-            <div v-else>
-              <el-button type="primary" link size="small">查看</el-button>
-              <el-button type="danger" link size="small" @click="handleDelete(scope.$index)">删除</el-button>
-            </div>
+            <el-button size="small" type="primary" :disabled="scope.row.status === '已通过'" @click="handleApproveRes(scope.row)">通过</el-button>
+            <el-button size="small" type="danger" @click="handleRejectRes(scope.row)">下架</el-button>
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </div>
+
+    <div class="section-box" style="margin-top: 40px;">
+      <h2> 学生申请自定义新Tab分类审核</h2>
+      <el-table :data="typeList" border stripe style="width: 100%; margin-top: 15px;">
+        <el-table-column prop="name" label="拟申请新分类名称" min-width="250" />
+        <el-table-column label="当前审批状态" width="180" align="center">
+          <template #default="scope">
+            <el-tag :type="scope.row.status === '已通过' ? 'success' : 'info'">
+              {{ scope.row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="批准决策" width="180" align="center">
+          <template #default="scope">
+            <el-button size="small" type="warning" :disabled="scope.row.status === '已通过'" @click="handleApproveType(scope.row)">
+              批准全站动态新增
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { getAllResourcesAPI, approveResourceAPI, rejectResourceAPI, getAllTypesAPI, approveTypeAPI } from '@/api/admin'
 
-const resourceList = ref([
-  { title: 'Vue3 响应式全景思维导图.pdf', type: '思维导图', uploader: '系统自带', isUserUploaded: false, status: 'approved', time: '2026-05-10 10:00' },
-  { title: '大模型提示词工程（Prompt）专项突破.mp4', type: '多模态视频', uploader: '张同学', isUserUploaded: true, status: 'pending', time: '2026-05-18 14:20' },
-  { title: 'Python数据结构核心攻坚题库.docx', type: '课程文档', uploader: '李同学', isUserUploaded: true, status: 'pending', time: '2026-05-18 15:10' },
-  { title: 'JavaScript 闭包必错题解析合集', type: '实操案例', uploader: '系统自带', isUserUploaded: false, status: 'approved', time: '2026-04-12 09:30' }
-])
+const loading = ref(false)
+const resourceList = ref([])
+const typeList = ref([])
 
-const getStatusType = (status) => {
-  return { 'approved': 'success', 'pending': 'warning', 'rejected': 'danger' }[status]
-}
-const getStatusText = (status) => {
-  return { 'approved': '正常开放', 'pending': '待管理员审核', 'rejected': '已驳回' }[status]
+// 拉取活数据
+const loadAllReviewData = async () => {
+  loading.value = true
+  try {
+    const resRes = await getAllResourcesAPI()
+    if (resRes && resRes.code === 200) resourceList.value = resRes.data
+
+    const typeRes = await getAllTypesAPI()
+    if (typeRes && typeRes.code === 200) typeList.value = typeRes.data
+  } catch (error) {
+    console.error(error)
+  } finally {
+    loading.value = false
+  }
 }
 
-// 审核流操作
-const handleAudit = (index, result) => {
-  resourceList.value[index].status = result
-  ElMessage.success(result === 'approved' ? '资源已上架开放' : '已成功驳回用户申请')
+// 资源通过
+const handleApproveRes = async (row) => {
+  const res = await approveResourceAPI(row.id)
+  if (res && res.code === 200) {
+    ElMessage.success(res.message)
+    loadAllReviewData()
+  }
 }
 
-const handleDelete = (index) => {
-  ElMessageBox.confirm('确定要永久删除该系统资源吗？', '警告', { type: 'warning' }).then(() => {
-    resourceList.value.splice(index, 1)
-    ElMessage.success('删除成功')
-  }).catch(() => {})
+// 资源下架
+const handleRejectRes = async (row) => {
+  const res = await rejectResourceAPI(row.id)
+  if (res && res.code === 200) {
+    ElMessage.success(res.message)
+    loadAllReviewData()
+  }
 }
+
+// 分类通过
+const handleApproveType = async (row) => {
+  const res = await approveTypeAPI(row.name)
+  if (res && res.code === 200) {
+    ElMessage.success(res.message)
+    loadAllReviewData()
+  }
+}
+
+onMounted(() => { loadAllReviewData() })
 </script>
 
 <style scoped>
-.table-card { border-radius: 8px; }
-.table-toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; }
+.admin-review-page { padding: 24px; background: #fff; border-radius: 8px; }
+.section-box h2 { margin: 0; font-size: 18px; color: #333; border-left: 4px solid #1890ff; padding-left: 10px; }
 </style>

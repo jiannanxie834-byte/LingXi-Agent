@@ -8,6 +8,18 @@
           登录 / 注册
         </el-button>
 
+        <div v-else style="display: flex; align-items: center; gap: 12px;">
+          
+          <el-button 
+            v-if="userStore.role === 'admin'" 
+            type="danger" 
+            plain 
+            size="small"
+            @click="goPage('/admin/dashboard')"
+          >
+             管理控制台
+          </el-button>
+
         <el-dropdown v-else @command="handleCommand" trigger="click">
           <div class="user-profile">
             <el-avatar :size="36" :src="userStore.avatar" class="avatar-box">
@@ -26,6 +38,7 @@
         </el-dropdown>
       </div>
     </div>
+</div>
 
     <div class="content"><router-view /></div>
 
@@ -56,7 +69,7 @@ const handleCommand = (command) => {
   if (command === 'goProfile') {
     router.push('/profile')
   } else if (command === 'logout') {
-    userStore.logout() // 🌟 调用 Pinia 清空数据
+    userStore.logout() //  调用 Pinia 清空数据
     ElMessage.warning('已安全退出登录')
     router.push('/') 
   }

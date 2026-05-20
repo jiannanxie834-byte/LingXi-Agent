@@ -39,3 +39,11 @@ export function submitFeedbackAPI(data) {
     data
   })
 }
+
+export function updateProfileAPI(data) {
+  return request({
+    url: '/user/profile/update',
+    method: 'put',
+    data
+  })
+}

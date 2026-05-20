@@ -112,7 +112,7 @@ const sendMessage = async () => {
   // 3. 页面更新后，自动滚动到底部
   await scrollToBottom()
 
-  // 4. 😈 模拟 AI 延迟回复 (这里以后就是对接你赛题里的大模型 API 的地方)
+  // 4.  模拟 AI 延迟回复 (这里以后就是对接你赛题里的大模型 API 的地方)
   setTimeout(async () => {
     messageList.value.push({
       role: 'ai',
