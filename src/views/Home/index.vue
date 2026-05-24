@@ -69,7 +69,7 @@ const inputText = ref('')
 const messageList = ref([
   {
     role: 'ai',
-    content: '你好，我是灵析多智能体学习助手。你可以直接问课程问题、让系统生成练习题、规划学习路线，或要求给出代码实操案例。'
+    content: '你好，我是灵析多智能体学习助手。你可以直接问课程问题、让系统生成练习题、规划学习路线，或要求给出学科实践应用任务。'
   }
 ])
 const isSending = ref(false)

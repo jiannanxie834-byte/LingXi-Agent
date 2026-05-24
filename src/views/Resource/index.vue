@@ -60,7 +60,7 @@
             <el-option label="不同类型练习题目" value="不同类型练习题目" />
             <el-option label="拓展阅读材料" value="拓展阅读材料" />
             <el-option label="错题诊断与学习反馈报告" value="错题诊断与学习反馈报告" />
-            <el-option label="代码类实操案例" value="代码类实操案例" />
+            <el-option label="学科实践应用任务" value="学科实践应用任务" />
           </el-select>
         </el-form-item>
         <el-form-item label="资源摘要">
@@ -74,7 +74,7 @@
             v-model="uploadForm.content"
             type="textarea"
             :rows="6"
-            placeholder="支持 Markdown，可填写讲解、题目、案例步骤或诊断报告"
+            placeholder="支持 Markdown，可填写讲解、题目、实践任务或诊断报告"
           />
         </el-form-item>
       </el-form>
@@ -162,7 +162,7 @@ const filteredResources = computed(() => {
     '不同类型练习题目': ['不同类型练习题目', '练习题目', '练习题', '题库', '试卷'],
     '拓展阅读材料': ['拓展阅读材料', '拓展阅读', '阅读材料'],
     '错题诊断与学习反馈报告': ['错题诊断与学习反馈报告', '错题诊断', '学习反馈', '诊断报告', '反馈报告'],
-    '代码类实操案例': ['代码类实操案例', '实操案例', '代码案例', '代码']
+    '学科实践应用任务': ['学科实践应用任务', '实践应用', '应用任务', '实践任务', '项目案例', '实验探究', '材料分析', '写作任务', '代码类实操案例', '实操案例', '代码案例']
   }
   const matchTypes = aliases[currentTab.value] || [currentTab.value]
   return rawResources.value.filter(item => {
@@ -179,6 +179,7 @@ const getCoverClass = (type) => {
   if (type.includes('导图')) return 'mindmap-cover'
   if (type.includes('文档')) return 'doc-cover'
   if (type.includes('诊断') || type.includes('反馈')) return 'feedback-cover'
+  if (type.includes('实践') || type.includes('应用')) return 'practice-cover'
   return 'mindmap-cover' // 默认兜底
 }
 
@@ -294,6 +295,7 @@ const handleView = (item) => {
 .mindmap-cover { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); }
 .doc-cover { background: linear-gradient(135deg, #ffd194 0%, #70e1f5 100%); }
 .feedback-cover { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); }
+.practice-cover { background: linear-gradient(135deg, #fddb92 0%, #d1fdff 100%); }
 
 .tag {
   background: rgba(255, 255, 255, 0.8);
