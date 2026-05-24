@@ -10,6 +10,15 @@ export function getPlanListAPI(username) {
   })
 }
 
+// 保存指定用户的完整规划路线
+export function savePlanAPI(username, plans) {
+  return request({
+    url: '/plan/save',
+    method: 'post',
+    data: { username, plans }
+  })
+}
+
 // 删除整条路线
 export function deleteRouteAPI(username, routeId) {
   return request({

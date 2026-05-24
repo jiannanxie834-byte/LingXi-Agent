@@ -21,7 +21,7 @@
           <svg v-if="isCollapsed" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><line x1="21" y1="12" x2="9" y2="12"></line><polyline points="15 18 21 12 15 6"></polyline><line x1="3" y1="6" x2="3" y2="18"></line></svg>
           <svg v-else viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><line x1="3" y1="12" x2="15" y2="12"></line><polyline points="9 18 3 12 9 6"></polyline><line x1="21" y1="6" x2="21" y2="18"></line></svg>
         </button>
-        <span class="header-title">当前对话：Vue学习</span>
+        <span class="header-title">当前对话：多智能体学习助手</span>
       </div>
       <div class="messages">
         <ChatMessage 
@@ -35,9 +35,12 @@
           <input 
             v-model="inputText"
             @keyup.enter="sendMessage"
+            :disabled="isSending"
             placeholder="请输入学习问题，按 Enter 发送..." 
           />
-          <button class="send-btn" @click="sendMessage">发送</button>
+          <button class="send-btn" :disabled="isSending" @click="sendMessage">
+            {{ isSending ? '生成中' : '发送' }}
+          </button>
         </div>
       </div>
     </div>
@@ -45,8 +48,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import ChatMessage from '@/components/ChatWindow/ChatMessage.vue' 
+import { sendChatMessageAPI } from '@/api/chat'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 // 控制侧边栏收缩状态
 const isCollapsed = ref(false)
@@ -58,46 +66,18 @@ const toggleSidebar = () => {
 // 绑定的输入框内容
 const inputText = ref('')
 
-// 模拟聊天数据列表
 const messageList = ref([
   {
     role: 'ai',
-    content: '你好！我是灵析AI学习助手。请问今天想学习什么内容？'
-  },
-  {
-    role: 'user',
-    content: '帮我复习一下 Vue3 的响应式原理，顺便给个代码例子。'
-  },
-  {
-    role: 'ai',
-    content: `好的！根据你的知识图谱，下面为你生成 **Vue3 响应式原理** 的专属学习资料：
-
-### 核心概念：Ref 的使用
-在 Vue3 中，我们使用 \`ref\` 来定义响应式数据，这比 Vue2 的 Option API 灵活得多。
-
-\`\`\`javascript
-import { ref } from 'vue'
-
-// 定义一个响应式计数器
-const count = ref(0)
-
-// 增加计数的方法
-const increment = () => {
-  count.value++ 
-  console.log('当前数值:', count.value)
-}
-\`\`\`
-
-**🔔 学习建议：**
-1. 牢记在 \`<script>\` 中修改必须带上 \`.value\`
-2. 结合你易错的生命周期知识点，建议课后去 **[资源]** 板块查看实操项目。`
+    content: '你好，我是灵析多智能体学习助手。你可以直接问课程问题、让系统生成练习题、规划学习路线，或要求给出代码实操案例。'
   }
 ])
+const isSending = ref(false)
 
 // 发送消息
 const sendMessage = async () => {
   // 如果输入为空（或者全是空格），直接拦截，不发送
-  if (!inputText.value.trim()) return
+  if (!inputText.value.trim() || isSending.value) return
 
   // 1. 把用户的消息推入数组
   const userText = inputText.value
@@ -112,14 +92,36 @@ const sendMessage = async () => {
   // 3. 页面更新后，自动滚动到底部
   await scrollToBottom()
 
-  // 4.  模拟 AI 延迟回复 (这里以后就是对接你赛题里的大模型 API 的地方)
-  setTimeout(async () => {
-    messageList.value.push({
-      role: 'ai',
-      content: `收到你的问题：**${userText}**。\n\n*多智能体系统正在分析你的学习画像，稍后这里将接入真实的流式大模型 API...*`
+  isSending.value = true
+  const aiMessage = {
+    role: 'ai',
+    content: '多智能体正在协作：画像分析、知识检索、资源生成、路径规划正在依次运行...'
+  }
+  messageList.value.push(aiMessage)
+  await scrollToBottom()
+
+  try {
+    const history = messageList.value
+      .filter(item => item.content !== aiMessage.content)
+      .slice(-8)
+    const res = await sendChatMessageAPI({
+      username: userStore.username || 'student',
+      message: userText,
+      history
     })
+
+    if (res && res.code === 200) {
+      aiMessage.content = res.data.reply
+      userStore.updateLearningProfile(res.data.profile)
+    }
+  } catch (error) {
+    console.error('多智能体对话失败:', error)
+    aiMessage.content = '多智能体服务暂时没有响应，请确认后端服务已经启动后再试。'
+    ElMessage.error('对话服务请求失败')
+  } finally {
+    isSending.value = false
     await scrollToBottom()
-  }, 1000) // 延迟 1 秒假装在思考
+  }
 }
 
 // 自动滚动到底部的方法
@@ -273,6 +275,10 @@ const scrollToBottom = async () => {
   cursor: pointer;
   font-weight: 500;
   transition: background 0.2s;
+}
+.send-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 .send-btn:hover {
   background: #40a9ff;

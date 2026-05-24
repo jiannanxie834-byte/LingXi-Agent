@@ -47,7 +47,7 @@ import { getAdminStatsAPI } from '@/api/admin'
 // 1. 🌟 在前端把卡片的皮肤和骨架死死固化好，完美对应你的 HTML 模板
 const statsCards = ref([
   { title: '全站注册总数', value: '0 人', tag: '活跃学生', bgColor: '#e6f7ff', color: '#1890ff' },
-  { title: '知识库储备总数', value: '0 份', tag: '多模态', bgColor: '#f6ffed', color: '#52c41a' },
+  { title: '知识库储备总数', value: '0 份', tag: '资源库', bgColor: '#f6ffed', color: '#52c41a' },
   { title: '待审核资源', value: '0 件', tag: '安全合规', bgColor: '#fff7e6', color: '#fa8c16' },
   { title: '待处理问题反馈', value: '0 件', tag: '待办', bgColor: '#fff1f0', color: '#f5222d' }
 ])

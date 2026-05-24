@@ -19,7 +19,7 @@ const props = defineProps({
 
 // 初始化 markdown-it 解析器
 const md = new MarkdownIt({
-  html: true,       // 允许解析 HTML
+  html: false,      // AI 输出只按 Markdown 渲染，避免注入不安全 HTML
   linkify: true,    // 自动将网址转换为可点击链接
   typographer: true,// 优化标点符号排版
   highlight: function (str, lang) {

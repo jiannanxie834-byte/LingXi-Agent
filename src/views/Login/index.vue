@@ -135,9 +135,8 @@ const handleLogin = async () => {
       }
         userStore.login(userData)
       
-        // 无论谁登录，全部先进主系统感受业务！
         ElMessage.success(`欢迎进入多智能体学习中枢，${userData.username}！`)
-        router.push('/') 
+        router.push(userData.role === 'admin' ? '/admin/dashboard' : '/') 
       }
     } catch (error) {
       console.error('登录流程中断:', error)

@@ -106,7 +106,7 @@
           </template>
           <div class="stats-box-quad-grid">
             <div class="quad-item">
-              <span class="quad-num">{{ isNewUser ? '0' : '128' }}</span>
+              <span class="quad-num">{{ userStore.hours || 0 }}</span>
               <span class="quad-label">累计学习(小时)</span>
             </div>
             <div class="quad-item">
@@ -131,13 +131,13 @@
           
           <div v-if="!isNewUser" class="active-advice-list">
             <div class="advice-row info-blue">
-              <strong>风格认知：</strong>偏向于“视觉-活跃型”。建议多使用系统生成的“多模态视频”和“思维导图”资源。
+              <strong>风格认知：</strong>偏向于“{{ profileAdvice.style }}”。建议优先使用匹配该风格的资源。
             </div>
             <div class="advice-row warning-orange">
-              <strong>目前的弱点：</strong>Vue3组合式API、计算机网络协议。
+              <strong>目前的弱点：</strong>{{ profileAdvice.weakness }}。
             </div>
             <div class="advice-row success-green">
-              <strong>下一步规划：</strong>已自动在【规划】页面为您生成《Vue3进阶突击路线》。
+              <strong>下一步规划：</strong>{{ profileAdvice.next }}
             </div>
           </div>
           
@@ -165,7 +165,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -230,6 +230,20 @@ const handleUpdateProfile = async () => {
 
 // 判断当前是否是新注册的用户
 const isNewUser = computed(() => userStore.username !== 'student')
+const radarLabels = ['知识基础', '自驱探索力', '实践动手能力', '学习专注度', '易错点修复', '认知匹配度']
+const radarValues = computed(() => {
+  const fallback = isNewUser.value ? [0, 0, 0, 0, 0, 0] : [85, 75, 92, 88, 70, 78]
+  if (!userStore.profileRadar || Object.keys(userStore.profileRadar).length === 0) return fallback
+  return radarLabels.map(label => Number(userStore.profileRadar[label] || 0))
+})
+const profileAdvice = computed(() => {
+  const dimensions = userStore.profileDimensions || {}
+  return {
+    style: dimensions['认知风格'] || '视觉-活跃型',
+    weakness: dimensions['知识短板'] || 'Vue3组合式API、计算机网络协议',
+    next: dimensions['学习目标'] ? `围绕「${dimensions['学习目标']}」生成下一轮学习资源与路径。` : '已自动在【规划】页面为您生成《Vue3进阶突击路线》。'
+  }
+})
 
 // =================  快捷轻量级内联更新  =================
 const isEditingBio = ref(false)
@@ -319,20 +333,13 @@ let myChart = null
 
 const initRadarChart = () => {
   if (!radarChartRef.value) return
-  myChart = echarts.init(radarChartRef.value)
+  if (!myChart) {
+    myChart = echarts.init(radarChartRef.value)
+  }
   
-  const radarData = isNewUser.value ? [0, 0, 0, 0, 0, 0] : [85, 75, 92, 88, 70, 78]
-
   const option = {
     radar: {
-      indicator: [
-        { name: '知识基础', max: 100 },
-        { name: '自驱探索力', max: 100 },
-        { name: '实践动手能力', max: 100 },
-        { name: '学习专注度', max: 100 },
-        { name: '易错点偏好', max: 100 },
-        { name: '认知风格', max: 100 }
-      ],
+      indicator: radarLabels.map(name => ({ name, max: 100 })),
       shape: 'polygon',
       splitNumber: 5,
       axisName: { color: '#333', fontSize: 13, fontWeight: 'bold' },
@@ -343,7 +350,7 @@ const initRadarChart = () => {
     series: [{
       type: 'radar',
       data: isNewUser.value ? [] : [{
-        value: radarData,
+        value: radarValues.value,
         name: '学情全息动态画像',
         areaStyle: { color: 'rgba(24, 144, 255, 0.25)' },
         lineStyle: { color: '#1890ff', width: 2 },
@@ -357,6 +364,10 @@ const initRadarChart = () => {
 onMounted(() => {
   initRadarChart()
   window.addEventListener('resize', () => myChart && myChart.resize())
+})
+
+watch(radarValues, () => {
+  initRadarChart()
 })
 </script>
 

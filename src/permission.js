@@ -16,6 +16,9 @@ router.beforeEach(async (to, from) => {
     if (to.path === '/login') {
       return '/'
     }
+    if (to.path.startsWith('/admin') && userStore.role !== 'admin') {
+      return '/'
+    }
     // 其他页面直接放行
     return true
   } else {

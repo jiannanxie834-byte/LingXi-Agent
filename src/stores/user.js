@@ -6,6 +6,9 @@ export const useUserStore = defineStore('user', () => {
   const token = ref(sessionStorage.getItem('token') || '')
   const username = ref(sessionStorage.getItem('username') || '')
   const avatar = ref(sessionStorage.getItem('avatar') || '')
+  const hours = ref(Number(sessionStorage.getItem('hours') || 0))
+  const profileDimensions = ref({})
+  const profileRadar = ref({})
 
   //   1：补上角色状态，这关系到你的管理员任意门！
   const role = ref(sessionStorage.getItem('role') || '')
@@ -29,6 +32,17 @@ export const useUserStore = defineStore('user', () => {
   }
   const tags = ref(safeTags)
 
+  try {
+    const rawDimensions = sessionStorage.getItem('profileDimensions')
+    if (rawDimensions) profileDimensions.value = JSON.parse(rawDimensions)
+    const rawRadar = sessionStorage.getItem('profileRadar')
+    if (rawRadar) profileRadar.value = JSON.parse(rawRadar)
+  } catch (error) {
+    console.error('画像数据解析失败:', error)
+    sessionStorage.removeItem('profileDimensions')
+    sessionStorage.removeItem('profileRadar')
+  }
+
   // ================= 2. 核心动作 (Actions) =================
 
   // 登录动作：完全信任并接收后端吐出的数据包 (userInfo)
@@ -36,6 +50,7 @@ export const useUserStore = defineStore('user', () => {
     token.value = userInfo.token || ''
     username.value = userInfo.username || ''
     avatar.value = userInfo.avatar || ''
+    hours.value = Number(userInfo.hours || 0)
     tags.value = userInfo.tags || []
 
     //  2：接收后端的 role
@@ -50,6 +65,7 @@ export const useUserStore = defineStore('user', () => {
     sessionStorage.setItem('token', token.value)
     sessionStorage.setItem('username', username.value)
     sessionStorage.setItem('avatar', avatar.value)
+    sessionStorage.setItem('hours', String(hours.value))
     sessionStorage.setItem('role', role.value)
     sessionStorage.setItem('bio', bio.value)
     sessionStorage.setItem('tags', JSON.stringify(tags.value))
@@ -60,8 +76,11 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     username.value = ''
     avatar.value = ''
+    hours.value = 0
     role.value = '' // 剥夺身份
     tags.value = []
+    profileDimensions.value = {}
+    profileRadar.value = {}
     bio.value = '这个人十分神秘，什么都没留下哟'
 
     isLoggedIn.value = false
@@ -80,11 +99,33 @@ export const useUserStore = defineStore('user', () => {
     sessionStorage.setItem('bio', bio.value)
   }
 
+  const updateLearningProfile = (profile = {}) => {
+    if (Array.isArray(profile.tags)) {
+      tags.value = profile.tags
+      sessionStorage.setItem('tags', JSON.stringify(tags.value))
+    }
+    if (typeof profile.hours === 'number') {
+      hours.value = profile.hours
+      sessionStorage.setItem('hours', String(hours.value))
+    }
+    if (profile.dimensions && typeof profile.dimensions === 'object') {
+      profileDimensions.value = profile.dimensions
+      sessionStorage.setItem('profileDimensions', JSON.stringify(profileDimensions.value))
+    }
+    if (profile.radar && typeof profile.radar === 'object') {
+      profileRadar.value = profile.radar
+      sessionStorage.setItem('profileRadar', JSON.stringify(profileRadar.value))
+    }
+  }
+
   // ================= 3. 暴露给组件使用 =================
   return {
     token,
     username,
     avatar,
+    hours,
+    profileDimensions,
+    profileRadar,
     role,
     bio,
     tags,
@@ -93,6 +134,7 @@ export const useUserStore = defineStore('user', () => {
     login,
     logout,
     updateAvatar,
-    updateBio
+    updateBio,
+    updateLearningProfile
   }
 })

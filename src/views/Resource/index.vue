@@ -40,7 +40,7 @@
           <p class="desc">资源编码: {{ item.id }} · 状态: 正常开放</p>
           <div class="action-bar">
             <button class="view-btn" @click="handleView(item)">
-              {{ item.type === '视频' ? '在线播放' : '查阅资源' }}
+              查阅资源
             </button>
           </div>
         </div>
@@ -55,16 +55,47 @@
         </el-form-item>
         <el-form-item label="资源类型">
           <el-select v-model="uploadForm.type" placeholder="请选择资源类型" style="width: 100%;">
-            <el-option label="思维导图" value="思维导图" />
-            <el-option label="课程文档" value="课程文档" />
-            <el-option label="多模态视频" value="多模态视频" />
-            <el-option label="实操案例" value="实操案例" />
+            <el-option label="专业课程讲解文档" value="专业课程讲解文档" />
+            <el-option label="知识点思维导图" value="知识点思维导图" />
+            <el-option label="不同类型练习题目" value="不同类型练习题目" />
+            <el-option label="拓展阅读材料" value="拓展阅读材料" />
+            <el-option label="错题诊断与学习反馈报告" value="错题诊断与学习反馈报告" />
+            <el-option label="代码类实操案例" value="代码类实操案例" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="资源摘要">
+          <el-input v-model="uploadForm.summary" placeholder="简要说明这份资源适合解决什么学习问题" />
+        </el-form-item>
+        <el-form-item label="知识来源">
+          <el-input v-model="uploadForm.source" placeholder="如：人工智能导论第3章 / 官方文档 / 课堂讲义" />
+        </el-form-item>
+        <el-form-item label="资源正文">
+          <el-input
+            v-model="uploadForm.content"
+            type="textarea"
+            :rows="6"
+            placeholder="支持 Markdown，可填写讲解、题目、案例步骤或诊断报告"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="uploadVisible = false">取消</el-button>
         <el-button type="primary" @click="submitUpload">确认上传</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="detailVisible" title="学习资源详情" width="760px" destroy-on-close>
+      <div v-if="selectedResource" class="resource-detail">
+        <h3>{{ selectedResource.title }}</h3>
+        <div class="detail-meta">
+          <el-tag>{{ selectedResource.type }}</el-tag>
+          <span>来源：{{ selectedResource.source || selectedResource.uploader || '课程资源库' }}</span>
+        </div>
+        <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
+        <MarkdownRenderer :content="selectedResource.content || '暂无正文内容'" />
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="detailVisible = false">我知道了</el-button>
       </template>
     </el-dialog>
   </div>
@@ -75,6 +106,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 //  引入接口：只拿通过审核的资源，以及前台上传接口
 import { getPassedTypesAPI, getPassedResourcesAPI, proposeTypeAPI, uploadResourceAPI } from '@/api/resource'
+import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
 
 const loading = ref(false)
 const rawResources = ref([]) // 从后端拿到的全量“已通过”资源
@@ -124,11 +156,17 @@ const filteredResources = computed(() => {
   if (currentTab.value === '全部') {
     return rawResources.value
   }
-  // 考虑到后端数据库存的是“文档”、“视频”，这里做个模糊兼容映射
+  const aliases = {
+    '专业课程讲解文档': ['专业课程讲解文档', '课程文档', '文档'],
+    '知识点思维导图': ['知识点思维导图', '思维导图', '导图'],
+    '不同类型练习题目': ['不同类型练习题目', '练习题目', '练习题', '题库', '试卷'],
+    '拓展阅读材料': ['拓展阅读材料', '拓展阅读', '阅读材料'],
+    '错题诊断与学习反馈报告': ['错题诊断与学习反馈报告', '错题诊断', '学习反馈', '诊断报告', '反馈报告'],
+    '代码类实操案例': ['代码类实操案例', '实操案例', '代码案例', '代码']
+  }
+  const matchTypes = aliases[currentTab.value] || [currentTab.value]
   return rawResources.value.filter(item => {
-    if (currentTab.value === '多模态视频') return item.type.includes('视频')
-    if (currentTab.value === '课程文档') return item.type.includes('文档')
-    return item.type === currentTab.value
+    return matchTypes.some(type => item.type.includes(type) || type.includes(item.type))
   })
 })
 
@@ -140,16 +178,18 @@ const handleTabClick = (tab) => {
 const getCoverClass = (type) => {
   if (type.includes('导图')) return 'mindmap-cover'
   if (type.includes('文档')) return 'doc-cover'
-  if (type.includes('视频')) return 'video-cover'
+  if (type.includes('诊断') || type.includes('反馈')) return 'feedback-cover'
   return 'mindmap-cover' // 默认兜底
 }
 
 //  4. 前台贡献上传资源逻辑
 const uploadVisible = ref(false)
 const uploadForm = ref({ title: '', type: '' })
+const detailVisible = ref(false)
+const selectedResource = ref(null)
 
 const openUploadDialog = () => {
-  uploadForm.value = { title: '', type: '' }
+  uploadForm.value = { title: '', type: '', summary: '', source: '', content: '' }
   uploadVisible.value = true
 }
 
@@ -172,7 +212,8 @@ const submitUpload = async () => {
 
 // 点击查看按钮
 const handleView = (item) => {
-  ElMessage.success(`解密成功！正在为您调取《${item.title}》的底层多模态数据流...`)
+  selectedResource.value = item
+  detailVisible.value = true
 }
 </script>
 
@@ -252,7 +293,7 @@ const handleView = (item) => {
 /* 唯美渐变色 */
 .mindmap-cover { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); }
 .doc-cover { background: linear-gradient(135deg, #ffd194 0%, #70e1f5 100%); }
-.video-cover { background: linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%); }
+.feedback-cover { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); }
 
 .tag {
   background: rgba(255, 255, 255, 0.8);
@@ -297,4 +338,7 @@ const handleView = (item) => {
   background: #1890ff;
   color: #fff;
 }
+.resource-detail h3 { margin: 0 0 12px; color: #1f2937; }
+.detail-meta { display: flex; align-items: center; gap: 10px; color: #6b7280; margin-bottom: 14px; }
+.summary { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; color: #374151; line-height: 1.7; }
 </style>

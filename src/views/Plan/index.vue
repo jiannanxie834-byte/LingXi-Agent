@@ -68,7 +68,7 @@
                       {{ step.title }}
                     </h4>
                     <div class="step-actions">
-                      <select v-model="step.status" class="status-select">
+                      <select v-model="step.status" class="status-select" @change="persistPlans">
                         <option value="completed">已学完</option>
                         <option value="active">进行中</option>
                         <option value="pending">待开始</option>
@@ -134,7 +134,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 //  1. 精准导入 API 文件里真实暴露的名字
-import { getPlanListAPI, deleteRouteAPI, deleteNodeAPI } from '@/api/plan'
+import { getPlanListAPI, deleteRouteAPI, savePlanAPI } from '@/api/plan'
 import { ElMessage } from 'element-plus'
 
 const userStore = useUserStore()
@@ -169,6 +169,17 @@ const fetchPlansData = async () => {
   }
 }
 
+const persistPlans = async (successMessage = '') => {
+  try {
+    const res = await savePlanAPI(userStore.username, plans.value)
+    if (successMessage && res && res.code === 200) {
+      ElMessage.success(successMessage)
+    }
+  } catch (error) {
+    console.error('保存学习路线失败:', error)
+  }
+}
+
 //  5. 删除整条路线
 const handleDeleteRoute = async (routeId) => {
   try {
@@ -183,18 +194,10 @@ const handleDeleteRoute = async (routeId) => {
 }
 
 //  6.剥离单个任务节点 (替换掉你之前的 deleteStep)
-const handleDeleteNode = async (routeId, taskId) => {
+const deleteStep = async (planIndex, stepIndex) => {
   if (!confirm('确定要删除这条路线中的该任务吗？')) return
-  
-  try {
-    const res = await deleteNodeAPI(userStore.username, routeId, taskId)
-    if (res && res.code === 200) {
-      ElMessage.success('任务节点已成功剥离！')
-      fetchPlansData() // 删完立刻重新拉取，刷新视图
-    }
-  } catch (error) {
-    console.error('删除节点失败:', error)
-  }
+  plans.value[planIndex].tasks.splice(stepIndex, 1)
+  await persistPlans('任务节点已成功剥离！')
 }
 
 // 切换规划路线的收缩状态 (纯前端 UI 控制，无需连后端)
@@ -211,6 +214,7 @@ const createNewPlan = () => {
     id: Date.now(), title: title, isCollapsed: false, isAiGenerated: false,
     tasks: [{ id: Date.now() + 1, title: '准备开始的第一步', desc: '点击下方在此处插入新任务。', status: 'pending', isCustom: true, resources: [] }]
   })
+  persistPlans('新规划路线已保存')
 }
 
 const insertTask = (planIndex, targetStepIndex) => {
@@ -222,6 +226,7 @@ const insertTask = (planIndex, targetStepIndex) => {
     id: Date.now(), title: taskTitle, desc: taskDesc, status: 'pending', isCustom: true, resources: []
   }
   plans.value[planIndex].tasks.splice(targetStepIndex, 0, newTask)
+  persistPlans('新任务已插入路线')
 }
 
 const addGlobalTask = () => {

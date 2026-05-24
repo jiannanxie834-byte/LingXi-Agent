@@ -5,7 +5,7 @@
       <p>实时查看并处理学生在前台提交的系统报错、改进建议与 AI 生成异常通知</p>
     </div>
 
-    <el-table :data="feedbackList" border stripe style="width: 100%; margin-top: 20px;">
+    <el-table :key="feedbackTableKey" :data="feedbackList" border stripe style="width: 100%; margin-top: 20px;">
       <el-table-column prop="id" label="反馈编码" width="100" align="center" />
       <el-table-column prop="username" label="学生账号" width="140" />
       <el-table-column prop="content" label="反馈具体内容" min-width="300" show-overflow-tooltip />
@@ -50,6 +50,7 @@ import { getAllFeedbackAPI, processFeedbackAPI, deleteFeedbackAPI } from '@/api/
 
 const loading = ref(false)
 const feedbackList = ref([])
+const feedbackTableKey = ref(0)
 
 // 1. 核心：从后端拉取全量用户反馈
 const fetchFeedbacks = async () => {
@@ -57,7 +58,8 @@ const fetchFeedbacks = async () => {
   try {
     const res = await getAllFeedbackAPI()
     if (res && res.code === 200) {
-      feedbackList.value = res.data
+      feedbackList.value = res.data.map(item => ({ ...item }))
+      feedbackTableKey.value += 1
     }
   } catch (error) {
     console.error('拉取反馈数据失败:', error)
@@ -71,8 +73,9 @@ const handleProcess = async (row) => {
   try {
     const res = await processFeedbackAPI(row.id)
     if (res && res.code === 200) {
+      row.status = '已处理'
       ElMessage.success('归档成功！已将该反馈标记为已处理状态。')
-      fetchFeedbacks() // 重新刷一下列表，让状态标签变绿
+      await fetchFeedbacks() // 重新刷一下列表，让状态标签变绿
     }
   } catch (error) {
     console.error(error)
@@ -88,8 +91,10 @@ const handleDelete = (row) => {
   }).then(async () => {
     const res = await deleteFeedbackAPI(row.id)
     if (res && res.code === 200) {
+      feedbackList.value = feedbackList.value.filter(item => item.id !== row.id)
+      feedbackTableKey.value += 1
       ElMessage.success('该反馈记录已被彻底从数据库中抹去。')
-      fetchFeedbacks()
+      await fetchFeedbacks()
     }
   }).catch(() => {})
 }
