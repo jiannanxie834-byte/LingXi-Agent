@@ -117,7 +117,7 @@
           <div class="task-list">
             <div class="task-item" v-for="(task, index) in myTasks" :key="task.id">
               <div class="task-left">
-                <input type="checkbox" v-model="task.done" />
+                <input type="checkbox" v-model="task.done" @change="persistTodos" />
                 <span :class="{ 'done': task.done }">{{ task.content }}</span>
               </div>
               <button class="delete-task-btn" @click="deleteGlobalTask(index)">✕</button>
@@ -135,6 +135,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 //  1. 精准导入 API 文件里真实暴露的名字
 import { getPlanListAPI, deleteRouteAPI, savePlanAPI } from '@/api/plan'
+import { getTodoListAPI, saveTodoAPI } from '@/api/todo'
 import { ElMessage } from 'element-plus'
 
 const userStore = useUserStore()
@@ -144,14 +145,12 @@ const loading = ref(false)
 const plans = ref([])
 
 // 独立自定义任务数组 (属于本地功能，暂时保留)
-const myTasks = ref([
-  { id: 1, content: '完成计网第三章课后习题', done: true },
-  { id: 2, content: '复习 JavaScript 异步编程', done: false }
-])
+const myTasks = ref([])
 
 //  3. 初始化拉取：页面一加载就去轰鸣后端
 onMounted(() => {
   fetchPlansData()
+  fetchTodoData()
 })
 
 //  4. 重新拉取活数据的通用函数
@@ -229,14 +228,16 @@ const insertTask = (planIndex, targetStepIndex) => {
   persistPlans('新任务已插入路线')
 }
 
-const addGlobalTask = () => {
+const addGlobalTask = async () => {
   const content = prompt('请输入待办事项:')
   if (!content || !content.trim()) return
   myTasks.value.push({ id: Date.now(), content: content, done: false })
+  await persistTodos()
 }
 
-const deleteGlobalTask = (index) => {
+const deleteGlobalTask = async (index) => {
   myTasks.value.splice(index, 1)
+  await persistTodos()
 }
 
 // 动态计算总体进度
@@ -253,6 +254,26 @@ const totalProgress = computed(() => {
   })
   return total ? Math.round((completed / total) * 100) : 0
 })
+
+const fetchTodoData = async () => {
+  try {
+    const res = await getTodoListAPI(userStore.username)
+
+    if (res && res.code === 200) {
+      myTasks.value = res.data
+    }
+  } catch (error) {
+    console.error('拉取待办失败:', error)
+  }
+}
+
+const persistTodos = async () => {
+  try {
+    await saveTodoAPI(userStore.username, myTasks.value)
+  } catch (error) {
+    console.error('保存待办失败:', error)
+  }
+}
 </script>
 
 <style scoped>

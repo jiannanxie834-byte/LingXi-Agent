@@ -44,7 +44,7 @@
 import { ref, onMounted } from 'vue'
 import { getAdminStatsAPI } from '@/api/admin'
 
-// 1. 🌟 在前端把卡片的皮肤和骨架死死固化好，完美对应你的 HTML 模板
+// 1.  在前端把卡片的皮肤和骨架死死固化好，完美对应你的 HTML 模板
 const statsCards = ref([
   { title: '全站注册总数', value: '0 人', tag: '活跃学生', bgColor: '#e6f7ff', color: '#1890ff' },
   { title: '知识库储备总数', value: '0 份', tag: '资源库', bgColor: '#f6ffed', color: '#52c41a' },
@@ -61,7 +61,7 @@ const fetchDashboardData = async () => {
     
     // 对应原本路由返回的 return {"code": 200, "data": db_service.get_dashboard_stats()}
     if (res && res.code === 200) {
-      const stats = res.data // 拿到后端那个扁平的字典
+      const stats = res.data.data
       
       // 3. 精准投喂数字，把后端的“凡间活数据”注入前端的“漂亮皮肤”里
       statsCards.value[0].value = `${stats.total_users} 人`
