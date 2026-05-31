@@ -61,7 +61,7 @@ const fetchDashboardData = async () => {
     
     // 对应原本路由返回的 return {"code": 200, "data": db_service.get_dashboard_stats()}
     if (res && res.code === 200) {
-      const stats = res.data.data
+      const stats = res.data || {}
       
       // 3. 精准投喂数字，把后端的“凡间活数据”注入前端的“漂亮皮肤”里
       statsCards.value[0].value = `${stats.total_users} 人`
