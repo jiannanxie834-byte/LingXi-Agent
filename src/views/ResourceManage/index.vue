@@ -3,24 +3,24 @@
     
     <div class="section-box">
       <h2> 初始课程知识资源审核</h2>
-      <el-table :key="resourceTableKey" :data="resourceList" border stripe style="width: 100%; margin-top: 15px;">
-        <el-table-column prop="id" label="资源编码" width="120" align="center" />
-        <el-table-column prop="title" label="资源名称" min-width="200" />
-        <el-table-column prop="type" label="资源模态" width="180" align="center">
+      <el-table :key="resourceTableKey" :data="resourceList" border stripe class="resource-table">
+        <el-table-column prop="id" label="资源编码" width="112" align="center" />
+        <el-table-column prop="title" label="资源名称" min-width="170" show-overflow-tooltip />
+        <el-table-column prop="type" label="资源模态" width="150" align="center" show-overflow-tooltip>
           <template #default="scope">
             <el-tag effect="plain">{{ scope.row.type }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="uploader" label="生成/提交来源" width="160" align="center" />
-        <el-table-column prop="time" label="提交时间" width="150" align="center" />
-        <el-table-column label="审核状态" width="120" align="center">
+        <el-table-column prop="uploader" label="生成/提交来源" width="130" align="center" show-overflow-tooltip />
+        <el-table-column prop="time" label="提交时间" width="138" align="center" />
+        <el-table-column label="审核状态" width="96" align="center">
           <template #default="scope">
             <el-tag :type="scope.row.status === '已通过' ? 'success' : 'warning'">
               {{ scope.row.status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作放行" width="240" align="center">
+        <el-table-column label="操作放行" width="178" align="center" fixed="right">
           <template #default="scope">
             <el-button size="small" plain @click="openDetail(scope.row)">查看</el-button>
             <el-button size="small" type="primary" :disabled="scope.row.status === '已通过'" @click="handleApproveRes(scope.row)">通过</el-button>
@@ -158,10 +158,12 @@ onMounted(() => { loadAllReviewData() })
 
 <style scoped>
 .admin-review-page { padding: 24px; background: #fff; border-radius: 8px; }
+.resource-table { width: 100%; margin-top: 15px; }
 .section-box h2 { margin: 0; font-size: 18px; color: #333; border-left: 4px solid #1890ff; padding-left: 10px; }
 .resource-detail h3 { margin: 0 0 12px; color: #1f2937; }
 .detail-meta { display: flex; align-items: center; gap: 10px; color: #6b7280; margin-bottom: 14px; }
 .summary { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; color: #374151; line-height: 1.7; }
 .source-line { margin: 12px 0; color: #4b5563; font-size: 14px; }
 .agent-notes { margin: 12px 0 18px; padding: 10px 12px; border-left: 4px solid #409eff; background: #ecf5ff; color: #1f4e79; line-height: 1.6; }
+:deep(.resource-table .el-button + .el-button) { margin-left: 6px; }
 </style>
