@@ -37,7 +37,10 @@
         @keyup.enter="handleRegister"
       >
         <el-form-item prop="username">
-          <el-input v-model="registerForm.username" placeholder="请设置登录账号" size="large" clearable />
+          <el-input v-model="registerForm.username" placeholder="请设置登录账号（不可重复）" size="large" clearable />
+        </el-form-item>
+        <el-form-item prop="nickname">
+          <el-input v-model="registerForm.nickname" placeholder="请设置展示昵称（可重复）" size="large" clearable />
         </el-form-item>
         <el-form-item prop="password">
           <el-input v-model="registerForm.password" type="password" placeholder="请设置密码 (不少于6位)" size="large" show-password />
@@ -77,7 +80,7 @@ const registerFormRef = ref(null)
 
 // 数据绑定
 const loginForm = ref({ username: '', password: '' })
-const registerForm = ref({ username: '', password: '', rePassword: '' })
+const registerForm = ref({ username: '', nickname: '', password: '', rePassword: '' })
 
 //  自定义校验：二次密码必须一致
 const validateRePassword = (rule, value, callback) => {
@@ -157,6 +160,7 @@ const handleRegister = async () => {
       // 真实呼叫后端注册接口
       await registerAPI({
         username: registerForm.value.username,
+        nickname: registerForm.value.nickname,
         password: registerForm.value.password
       })
       
@@ -174,13 +178,45 @@ const handleRegister = async () => {
 
 <style scoped>
 .login-container {
-  height: 100vh;
+  --login-bg-image: none;
+  min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 32px;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  background-color: #eef5f1;
+  background-image:
+    linear-gradient(120deg, rgba(246, 250, 247, 0.94), rgba(232, 242, 238, 0.82) 46%, rgba(220, 232, 242, 0.82)),
+    var(--login-bg-image);
+  background-size: cover, cover;
+  background-position: center, center;
 }
-.login-card { width: 400px; border-radius: 12px; padding: 20px 30px; }
+
+.login-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.22) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(115deg, rgba(0, 0, 0, 0.35), transparent 70%);
+  pointer-events: none;
+}
+
+.login-card {
+  width: min(400px, 100%);
+  border-radius: 12px;
+  padding: 20px 30px;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 24px 70px rgba(48, 71, 86, 0.18);
+}
 .logo-box { text-align: center; margin-bottom: 24px; }
 .logo-box h2 { margin: 0 0 6px 0; color: #333; }
 .logo-box p { margin: 0; color: #8c8c8c; font-size: 13px; }

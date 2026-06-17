@@ -1,9 +1,9 @@
 <template>
-  <div class="markdown-body" v-html="renderedHtml"></div>
+  <div ref="markdownRef" class="markdown-body" v-html="renderedHtml"></div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 // 🌟 引入极其极客的深色代码高亮主题
@@ -17,12 +17,32 @@ const props = defineProps({
   }
 })
 
+const markdownRef = ref(null)
+
+let mermaidInstance = null
+
+const loadMermaid = async () => {
+  if (!mermaidInstance) {
+    const module = await import('mermaid')
+    mermaidInstance = module.default
+    mermaidInstance.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'default'
+    })
+  }
+  return mermaidInstance
+}
+
 // 初始化 markdown-it 解析器
 const md = new MarkdownIt({
   html: false,      // AI 输出只按 Markdown 渲染，避免注入不安全 HTML
   linkify: true,    // 自动将网址转换为可点击链接
   typographer: true,// 优化标点符号排版
   highlight: function (str, lang) {
+    if ((lang || '').toLowerCase() === 'mermaid') {
+      return `<div class="mermaid">${md.utils.escapeHtml(str)}</div>`
+    }
     // 核心代码高亮逻辑
     if (lang && hljs.getLanguage(lang)) {
       try {
@@ -39,6 +59,22 @@ const md = new MarkdownIt({
 const renderedHtml = computed(() => {
   return md.render(props.content)
 })
+
+const renderMermaid = async () => {
+  await nextTick()
+  const nodes = markdownRef.value?.querySelectorAll('.mermaid')
+  if (!nodes || !nodes.length) return
+  try {
+    const mermaid = await loadMermaid()
+    await mermaid.run({ nodes })
+  } catch (error) {
+    console.warn('Mermaid 渲染失败:', error)
+  }
+}
+
+watch(() => props.content, renderMermaid, { flush: 'post' })
+
+onMounted(renderMermaid)
 </script>
 
 <style scoped>
@@ -72,6 +108,15 @@ const renderedHtml = computed(() => {
   margin: 12px 0;
   background-color: #0d1117; /* 匹配 github-dark 的背景色 */
   overflow-x: auto;
+}
+:deep(.mermaid) {
+  margin: 14px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  overflow-x: auto;
+  text-align: center;
 }
 :deep(code) {
   font-family: 'Consolas', 'Monaco', 'Ubuntu Mono', monospace;

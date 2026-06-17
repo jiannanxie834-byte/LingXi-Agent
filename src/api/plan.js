@@ -27,12 +27,3 @@ export function deleteRouteAPI(username, routeId) {
     params: { username, route_id: routeId }
   })
 }
-
-// 删除路线中的单个节点
-export function deleteNodeAPI(username, routeId, nodeId) {
-  return request({
-    url: '/plan/node/delete',
-    method: 'delete',
-    params: { username, route_id: routeId, node_id: nodeId }
-  })
-}

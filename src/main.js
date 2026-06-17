@@ -15,8 +15,8 @@ const app = createApp(App)
 //  2. 实例化 Pinia 
 const pinia = createPinia()
 
-app.use(router)
 app.use(pinia) //  3. 挂载 Pinia
+app.use(router)
 app.use(ElementPlus)
 
 app.mount('#app')

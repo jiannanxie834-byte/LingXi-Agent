@@ -23,9 +23,9 @@
         <el-dropdown v-else @command="handleCommand" trigger="click">
           <div class="user-profile">
             <el-avatar :size="36" :src="userStore.avatar" class="avatar-box">
-              {{ userStore.username ? userStore.username.charAt(0).toUpperCase() : 'U' }}
+              {{ displayName ? displayName.charAt(0).toUpperCase() : 'U' }}
             </el-avatar>
-            <span class="username">{{ userStore.username }}</span>
+            <span class="username">{{ displayName }}</span>
             <span class="arrow-icon">▼</span>
           </div>
           
@@ -63,6 +63,7 @@ const route = useRoute()
 const userStore = useUserStore() // 🌟 实例化 Pinia Store
 
 const currentPath = computed(() => route.path)
+const displayName = computed(() => userStore.nickname || userStore.username || '用户')
 const goPage = (path) => router.push(path)
 const goToLogin = () => router.push('/login')
 

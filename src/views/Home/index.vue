@@ -2,17 +2,27 @@
   <div class="home">
     <div class="sidebar" :class="{ 'collapsed': isCollapsed }">
       <div class="sidebar-content">
-        <button class="new-chat">
+        <button class="new-chat" :disabled="isSending" @click="startNewChat">
           + 新对话
         </button>
 
         <div class="history">
-          <div class="history-item">
-            Vue学习
+          <div
+            v-if="chatSessions.length === 0"
+            class="history-empty"
+          >
+            暂无历史对话
           </div>
 
-          <div class="history-item">
-            JavaScript复习
+          <div
+            v-for="session in chatSessions"
+            :key="session.id"
+            class="history-item"
+            :class="{ active: activeSessionId === session.id }"
+            @click="loadSessionMessages(session)"
+          >
+            <span class="history-title">{{ session.title || '新对话' }}</span>
+            <span class="history-time">{{ formatSessionTime(session.updated_at || session.created_at) }}</span>
           </div>
         </div>
       </div>
@@ -99,11 +109,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick } from 'vue'
+import { ref, reactive, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import ChatMessage from '@/components/ChatWindow/ChatMessage.vue'
-import { sendChatMessageAPI } from '@/api/chat'
+import { getChatMessagesAPI, getChatSessionsAPI, sendChatMessageAPI } from '@/api/chat'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -117,19 +127,141 @@ const inputText = ref('')
 
 const isSending = ref(false)
 
-const messageList = ref([
-  {
-    role: 'ai',
-    content:
-      '你好，我是灵析多智能体学习助手。你可以直接问课程问题、让系统生成练习题、规划学习路线，或要求给出学科实践应用任务。'
+const chatSessions = ref([])
+
+const activeSessionId = ref('')
+
+const welcomeMessage = {
+  role: 'ai',
+  content:
+    '你好，我是灵析多智能体学习助手。你可以直接问课程问题、让系统生成练习题、规划学习路线，或要求给出学科实践应用任务。'
+}
+
+const messageList = ref([{ ...welcomeMessage }])
+
+const currentUsername = () => userStore.username || 'student'
+
+const activeSessionStorageKey = () => `lingxi_active_chat_${currentUsername()}`
+
+const createPendingPipelineSteps = () => [
+  { key: 'intent', label: '识别学习意图与课程主题', agent: '意图识别 Agent', status: 'running', detail: '解析自然语言输入' },
+  { key: 'evidence', label: '检索课程知识库依据', agent: '知识检索 Agent', status: 'pending', detail: '匹配初始课程知识库和已审核资源' },
+  { key: 'profile', label: '更新动态学习画像', agent: '画像建模 Agent', status: 'pending', detail: '融合历史学习数据' },
+  { key: 'answer', label: '生成个性化辅导回复', agent: '学习辅导 Agent', status: 'pending', detail: '调用大模型生成回答' },
+  { key: 'plan', label: '规划学习路径', agent: '路径规划 Agent', status: 'pending', detail: '按需生成路线' },
+  { key: 'resource-plan', label: '规划配套资源类型', agent: '资源设计 Agent', status: 'pending', detail: '按需生成资源' },
+  { key: 'safety', label: '完成内容安全与防幻觉自检', agent: '内容安全 Agent', status: 'pending', detail: '等待资源生成后复核' }
+]
+
+let progressTimer = null
+
+const clearProgressTimer = () => {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
   }
-])
+}
+
+const startProgressSimulation = (aiMsg) => {
+  clearProgressTimer()
+  let activeIndex = 0
+  progressTimer = setInterval(() => {
+    const steps = aiMsg.progressSteps || []
+    if (!steps.length || activeIndex >= steps.length - 1) {
+      return
+    }
+    steps[activeIndex].status = 'completed'
+    activeIndex += 1
+    steps[activeIndex].status = 'running'
+  }, 850)
+}
+
+const completePendingSteps = (steps = []) => {
+  return steps.map(step => ({
+    ...step,
+    status: step.status === 'pending' || step.status === 'running' ? 'completed' : step.status
+  }))
+}
 
 // =========================
 // 侧边栏
 // =========================
 const toggleSidebar = () => {
   isCollapsed.value = !isCollapsed.value
+}
+
+const formatSessionTime = (value) => {
+  if (!value) return ''
+  const date = new Date(value.replace(' ', 'T'))
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+
+const resetMessages = () => {
+  messageList.value = [{ ...welcomeMessage }]
+}
+
+const refreshChatSessions = async () => {
+  const res = await getChatSessionsAPI(currentUsername())
+  if (res && res.code === 200) {
+    chatSessions.value = res.data || []
+  }
+}
+
+const startNewChat = () => {
+  if (isSending.value) return
+  activeSessionId.value = ''
+  sessionStorage.removeItem(activeSessionStorageKey())
+  resetMessages()
+  scrollToBottom()
+}
+
+const loadSessionMessages = async (session) => {
+  if (isSending.value) {
+    ElMessage.warning('当前消息生成中，请稍后再切换对话')
+    return
+  }
+  if (!session?.id) return
+
+  try {
+    activeSessionId.value = session.id
+    sessionStorage.setItem(activeSessionStorageKey(), session.id)
+
+    const res = await getChatMessagesAPI(session.id, currentUsername())
+    if (res && res.code === 200) {
+      const messages = (res.data || []).map(item => ({
+        role: item.role === 'user' ? 'user' : 'ai',
+        content: item.content || '',
+        progressSteps: item.pipeline_steps || item.progress_steps || [],
+        safetySummary: item.safety_summary || null,
+        evidence: item.evidence || []
+      }))
+      messageList.value = messages.length ? messages : [{ ...welcomeMessage }]
+      await scrollToBottom()
+    }
+  } catch (error) {
+    console.error('加载历史对话失败:', error)
+    ElMessage.error('历史对话加载失败')
+  }
+}
+
+const restoreLastSession = async () => {
+  try {
+    await refreshChatSessions()
+
+    const savedSessionId = sessionStorage.getItem(activeSessionStorageKey())
+    const savedSession = chatSessions.value.find(item => item.id === savedSessionId)
+    const defaultSession = savedSession || chatSessions.value[0]
+
+    if (defaultSession) {
+      await loadSessionMessages(defaultSession)
+    }
+  } catch (error) {
+    console.error('恢复对话失败:', error)
+  }
 }
 
 // =========================
@@ -180,10 +312,14 @@ const sendMessage = async () => {
   // =========================
   const aiMsg = reactive({
     role: 'ai',
-    content: '思考中...'
+    content: '正在组织回答...',
+    progressSteps: createPendingPipelineSteps(),
+    safetySummary: null,
+    evidence: []
   })
 
   messageList.value.push(aiMsg)
+  startProgressSimulation(aiMsg)
 
   await scrollToBottom()
 
@@ -194,17 +330,16 @@ const sendMessage = async () => {
     // =========================
     const res = await sendChatMessageAPI({
       username: userStore.username || 'student',
+      session_id: activeSessionId.value,
       message: userText
     })
-
-    console.log('AI接口返回:', res)
 
     // =========================
     // 4. 提取 AI 回复
     // =========================
     const reply =
-      res?.data?.data?.reply ||
       res?.data?.reply ||
+      res?.data?.data?.reply ||
       res?.reply ||
       'AI暂时没有回复'
 
@@ -212,6 +347,25 @@ const sendMessage = async () => {
     // 5. 替换“思考中...”
     // =========================
     aiMsg.content = reply
+
+    const resultData = res?.data || {}
+    aiMsg.progressSteps = resultData.pipeline_steps && resultData.pipeline_steps.length
+      ? resultData.pipeline_steps
+      : completePendingSteps(aiMsg.progressSteps)
+    aiMsg.safetySummary = resultData.safety_summary || null
+    aiMsg.evidence = resultData.evidence || []
+
+    if (resultData.session_id) {
+      activeSessionId.value = resultData.session_id
+      sessionStorage.setItem(activeSessionStorageKey(), resultData.session_id)
+    }
+
+    if (resultData.session) {
+      const nextSessions = chatSessions.value.filter(item => item.id !== resultData.session.id)
+      chatSessions.value = [resultData.session, ...nextSessions]
+    } else {
+      await refreshChatSessions()
+    }
 
     // =========================
     // 6. 更新画像
@@ -229,10 +383,16 @@ const sendMessage = async () => {
     console.error('AI请求失败:', error)
 
     aiMsg.content = '后端服务异常，请稍后再试'
+    aiMsg.progressSteps = (aiMsg.progressSteps || []).map(step => ({
+      ...step,
+      status: step.status === 'running' ? 'fallback' : step.status
+    }))
 
     ElMessage.error('AI请求失败')
 
   } finally {
+
+    clearProgressTimer()
 
     // 解锁
     isSending.value = false
@@ -240,6 +400,10 @@ const sendMessage = async () => {
     await scrollToBottom()
   }
 }
+
+onMounted(() => {
+  restoreLastSession()
+})
 </script>
 
 <style scoped>
@@ -293,18 +457,48 @@ const sendMessage = async () => {
   overflow-y: auto;
 }
 
-.history-item {
+.history-empty {
   padding: 12px;
+  color: #999;
+  font-size: 13px;
+}
+
+.history-item {
+  padding: 10px 12px;
   border-radius: 8px;
   margin-bottom: 8px;
   cursor: pointer;
   color: #333;
   font-size: 14px;
   transition: background 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .history-item:hover {
   background: #ececec;
+}
+
+.history-item.active {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.history-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.history-time {
+  font-size: 12px;
+  color: #999;
+}
+
+.history-item.active .history-time {
+  color: #4096ff;
 }
 
 /* ================= 右侧聊天区 ================= */

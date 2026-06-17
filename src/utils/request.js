@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 // 1. 创建 axios 实例
 const service = axios.create({
   baseURL: 'http://127.0.0.1:8000/api',
-  timeout: 10000 // 请求超时时间
+  timeout: 120000 // AI 生成和资源规划可能需要等待大模型返回
 })
 
 // 2. 请求拦截器：发请求之前，自动在请求头里带上 Token

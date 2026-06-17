@@ -4,20 +4,22 @@
       <div class="hero-flex-container">
         <el-upload
           action="#"
+          accept="image/*"
           :show-file-list="false"
           :auto-upload="false"
           :on-change="handleAvatarChange"
           class="avatar-uploader-wrapper"
         >
           <el-avatar :size="90" :src="userStore.avatar" class="profile-avatar">
-            {{ userStore.username ? userStore.username.charAt(0).toUpperCase() : 'U' }}
+            {{ displayName ? displayName.charAt(0).toUpperCase() : 'U' }}
           </el-avatar>
           <div class="change-mask">更换头像</div>
         </el-upload>
 
         <div class="profile-meta-info">
           <div class="name-edit-row">
-            <h2 class="username-title">{{ userStore.username || '学伴新用户' }}</h2>
+            <h2 class="username-title">{{ displayName }}</h2>
+            <span class="account-text">登录账号：{{ userStore.username }}</span>
           </div>
           
           <div class="bio-zone">
@@ -36,10 +38,13 @@
             </p>
           </div>
           
-          <div class="tags-row" v-if="userStore.tags && userStore.tags.length > 0">
-            <el-tag v-for="tag in userStore.tags" :key="tag" size="small" class="custom-tag">
-              {{ tag }}
-            </el-tag>
+          <div class="knowledge-tags" v-if="knowledgeTags.length > 0">
+            <span class="knowledge-tags-label">知识点概括</span>
+            <div class="tags-row">
+              <el-tag v-for="tag in knowledgeTags" :key="tag" size="small" class="custom-tag">
+                {{ tag }}
+              </el-tag>
+            </div>
           </div>
         </div>
 
@@ -53,16 +58,47 @@
         <el-form-item label="登录账号">
           <el-input v-model="profileForm.username" disabled />
         </el-form-item>
-        <el-form-item label="新密码">
-          <el-input 
-            v-model="profileForm.password" 
-            type="password" 
-            show-password 
-            placeholder="留空则代表不修改密码" 
-          />
+        <el-form-item label="展示昵称">
+          <el-input v-model="profileForm.nickname" maxlength="20" placeholder="请输入展示昵称，可与他人重复" />
         </el-form-item>
-        <el-form-item label="头像链接">
-          <el-input v-model="profileForm.avatar" placeholder="请输入头像图片 URL 或者是本地 Base64" />
+        <el-form-item label="密码">
+          <div class="password-editor">
+            <el-button
+              v-if="!isChangingPassword"
+              type="primary"
+              plain
+              @click="enablePasswordChange"
+            >
+              修改密码
+            </el-button>
+            <template v-else>
+              <el-input
+                v-model="profileForm.password"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                placeholder="请输入新密码"
+              />
+              <el-button plain @click="cancelPasswordChange">取消修改</el-button>
+            </template>
+          </div>
+        </el-form-item>
+        <el-form-item label="头像">
+          <div class="dialog-avatar-editor">
+            <el-avatar :size="64" :src="profileForm.avatar" class="dialog-avatar-preview">
+              {{ displayName ? displayName.charAt(0).toUpperCase() : 'U' }}
+            </el-avatar>
+            <el-upload
+              action="#"
+              accept="image/*"
+              :show-file-list="false"
+              :auto-upload="false"
+              :on-change="handleDialogAvatarChange"
+            >
+              <el-button type="primary" plain>选择图片</el-button>
+            </el-upload>
+            <el-button plain @click="clearDialogAvatar">移除头像</el-button>
+          </div>
         </el-form-item>
         <el-form-item label="个性签名">
           <el-input 
@@ -92,7 +128,9 @@
         <template #header>
           <div class="card-header-bar">
             <span class="card-title"> AI动态学习画像</span>
-            <el-tag size="small" type="success" effect="light" class="refresh-badge">刚刚随学随新</el-tag>
+            <el-tag size="small" type="success" effect="light" class="refresh-badge">
+              {{ profileUpdateText }}
+            </el-tag>
           </div>
         </template>
         <div ref="radarChartRef" class="radar-chart-container"></div>
@@ -176,20 +214,76 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const loading = ref(false)
+const avatarSaving = ref(false)
+const MAX_AVATAR_FILE_SIZE = 3 * 1024 * 1024
+const AVATAR_OUTPUT_SIZE = 320
+
+const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(reader.result)
+  reader.onerror = () => reject(reader.error)
+  reader.readAsDataURL(file)
+})
+
+const loadImage = (src) => new Promise((resolve, reject) => {
+  const image = new Image()
+  image.onload = () => resolve(image)
+  image.onerror = reject
+  image.src = src
+})
+
+const buildAvatarDataUrl = async (rawFile) => {
+  if (!rawFile) throw new Error('请选择图片')
+  if (!rawFile.type || !rawFile.type.startsWith('image/')) {
+    throw new Error('请选择图片文件')
+  }
+  if (rawFile.size > MAX_AVATAR_FILE_SIZE) {
+    throw new Error('图片不能超过 3MB')
+  }
+
+  const dataUrl = await readFileAsDataUrl(rawFile)
+  const image = await loadImage(dataUrl)
+  const canvas = document.createElement('canvas')
+  canvas.width = AVATAR_OUTPUT_SIZE
+  canvas.height = AVATAR_OUTPUT_SIZE
+  const context = canvas.getContext('2d')
+
+  const side = Math.min(image.width, image.height)
+  const sourceX = Math.floor((image.width - side) / 2)
+  const sourceY = Math.floor((image.height - side) / 2)
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    side,
+    side,
+    0,
+    0,
+    AVATAR_OUTPUT_SIZE,
+    AVATAR_OUTPUT_SIZE
+  )
+
+  return canvas.toDataURL('image/jpeg', 0.86)
+}
 
 // =================  个人资料全栈更新内核  =================
 const profileVisible = ref(false)
 const profileForm = ref({
   username: '',
+  nickname: '',
   password: '',
   avatar: '',
   bio: ''
 })
+const isChangingPassword = ref(false)
 
 // 点击“修改资料”按钮：开箱，并执行标准的数据流回显
 const openEditDialog = () => {
+  isChangingPassword.value = false
   profileForm.value = {
     username: userStore.username,
+    nickname: userStore.nickname || userStore.username,
     password: '', // 密码初始留空
     avatar: userStore.avatar,
     bio: userStore.bio
@@ -197,26 +291,56 @@ const openEditDialog = () => {
   profileVisible.value = true
 }
 
+const enablePasswordChange = () => {
+  isChangingPassword.value = true
+  profileForm.value.password = ''
+}
+
+const cancelPasswordChange = () => {
+  isChangingPassword.value = false
+  profileForm.value.password = ''
+}
+
+const handleDialogAvatarChange = async (uploadFile) => {
+  try {
+    profileForm.value.avatar = await buildAvatarDataUrl(uploadFile.raw)
+    ElMessage.success('头像已选择')
+  } catch (error) {
+    ElMessage.warning(error.message || '头像读取失败')
+  }
+}
+
+const clearDialogAvatar = () => {
+  profileForm.value.avatar = ''
+}
+
 // 提交更新逻辑
 const handleUpdateProfile = async () => {
   if (!profileForm.value.username) return
+  const passwordChanged = isChangingPassword.value && profileForm.value.password.trim()
+  const payload = {
+    username: profileForm.value.username,
+    nickname: profileForm.value.nickname.trim(),
+    password: passwordChanged ? profileForm.value.password.trim() : '',
+    avatar: profileForm.value.avatar,
+    bio: profileForm.value.bio
+  }
+
   loading.value = true
   try {
-    const res = await updateProfileAPI(profileForm.value)
+    const res = await updateProfileAPI(payload)
     
     if (res && res.code === 200) {
       ElMessage.success('资料同步云端成功！')
       
+      userStore.updateNickname(res.data.nickname)
       userStore.updateBio(res.data.bio)
       userStore.updateAvatar(res.data.avatar)
       
       profileVisible.value = false // 优雅关闭弹窗
       
-      // 级联安全策略：如果改了密码，强制踢回登录页
-      if (profileForm.value.password) {
-        ElMessage.warning('检测到核心密码已变更，请重新登录！')
-        userStore.logout()
-        router.push('/login')
+      if (passwordChanged) {
+        ElMessage.info('密码已更新，下次登录请使用新密码。')
       }
     } else {
       ElMessage.error(res.message || '更新失败')
@@ -230,6 +354,8 @@ const handleUpdateProfile = async () => {
 
 // 判断当前是否是新注册的用户
 const isNewUser = computed(() => userStore.username !== 'student')
+const displayName = computed(() => userStore.nickname || userStore.username || '学伴新用户')
+const knowledgeTags = computed(() => userStore.tags || [])
 const radarLabels = ['知识基础', '自驱探索力', '实践动手能力', '学习专注度', '易错点修复', '认知匹配度']
 const radarValues = computed(() => {
   const fallback = isNewUser.value ? [0, 0, 0, 0, 0, 0] : [85, 75, 92, 88, 70, 78]
@@ -243,6 +369,44 @@ const profileAdvice = computed(() => {
     weakness: dimensions['知识短板'] || 'Vue3组合式API、计算机网络协议',
     next: dimensions['学习目标'] ? `围绕「${dimensions['学习目标']}」生成下一轮学习资源与路径。` : '已自动在【规划】页面为您生成《Vue3进阶突击路线》。'
   }
+})
+
+const padTime = (value) => String(value).padStart(2, '0')
+
+const profileUpdateText = computed(() => {
+  const rawTime = userStore.profileUpdatedAt
+  if (!rawTime) return '更新于刚刚'
+
+  const updatedAt = new Date(rawTime)
+  if (Number.isNaN(updatedAt.getTime())) return '更新于刚刚'
+
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const updatedDayStart = new Date(
+    updatedAt.getFullYear(),
+    updatedAt.getMonth(),
+    updatedAt.getDate()
+  )
+  const dayDiff = Math.round((todayStart - updatedDayStart) / 86400000)
+  const minuteDiff = Math.floor((now - updatedAt) / 60000)
+
+  if (minuteDiff >= 0 && minuteDiff < 1) {
+    return '更新于刚刚'
+  }
+
+  if (dayDiff === 0) {
+    return `更新于${padTime(updatedAt.getHours())}:${padTime(updatedAt.getMinutes())}`
+  }
+
+  if (dayDiff === 1) return '更新于昨天'
+  if (dayDiff === 2) return '更新于前天'
+
+  const monthDay = `${updatedAt.getMonth() + 1}月${updatedAt.getDate()}日`
+  if (updatedAt.getFullYear() !== now.getFullYear()) {
+    return `更新于${updatedAt.getFullYear()}年${monthDay}`
+  }
+
+  return `更新于${monthDay}`
 })
 
 // =================  快捷轻量级内联更新  =================
@@ -280,12 +444,14 @@ const saveBio = async () => {
 
 // 头像快捷本地上传更换：同样后端
 const handleAvatarChange = async (file) => {
-  const localUrl = URL.createObjectURL(file.raw)
+  if (avatarSaving.value) return
+  avatarSaving.value = true
   try {
+    const avatarDataUrl = await buildAvatarDataUrl(file.raw)
     const res = await updateProfileAPI({
       username: userStore.username,
       password: '',
-      avatar: localUrl,
+      avatar: avatarDataUrl,
       bio: userStore.bio
     })
     if (res && res.code === 200) {
@@ -294,6 +460,9 @@ const handleAvatarChange = async (file) => {
     }
   } catch (err) {
     console.error(err)
+    ElMessage.warning(err.message || '头像更新失败')
+  } finally {
+    avatarSaving.value = false
   }
 }
 
@@ -439,6 +608,12 @@ watch(radarValues, () => {
   font-size: 24px; 
   font-weight: bold; 
 }
+.account-text {
+  display: inline-block;
+  margin-top: 4px;
+  color: #8c8c8c;
+  font-size: 12px;
+}
 
 /* 个签排版 */
 .bio-zone { 
@@ -463,7 +638,21 @@ watch(radarValues, () => {
   opacity: 0.6; 
 }
 
-.tags-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.knowledge-tags {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.knowledge-tags-label {
+  color: #8c8c8c;
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.tags-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .custom-tag { 
   background-color: #e6f7ff; 
   color: #1890ff; 
@@ -475,6 +664,31 @@ watch(radarValues, () => {
 .hero-action-buttons { 
   display: flex; 
   gap: 12px; 
+}
+
+.dialog-avatar-editor {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dialog-avatar-preview {
+  background-color: #1890ff;
+  color: #fff;
+  font-weight: bold;
+  flex: 0 0 auto;
+}
+
+.password-editor {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.password-editor .el-input {
+  flex: 1;
 }
 
 /* 下部大网格布局 */

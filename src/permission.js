@@ -2,7 +2,7 @@ import router from './router'
 import { useUserStore } from '@/stores/user'
 
 // 白名单：不需要登录就能直接访问的路由地址
-const whiteList = ['/login', '/']
+const whiteList = ['/login']
 
 router.beforeEach(async (to, from) => {
   //  在路由守卫函数内部实例化 Store
@@ -14,10 +14,13 @@ router.beforeEach(async (to, from) => {
   if (hasToken) {
     // 已经登录了，还想去登录页？直接强制弹回首页
     if (to.path === '/login') {
-      return '/'
+      return userStore.role === 'admin' ? '/admin/dashboard' : '/'
     }
     if (to.path.startsWith('/admin') && userStore.role !== 'admin') {
       return '/'
+    }
+    if (!to.path.startsWith('/admin') && userStore.role === 'admin') {
+      return '/admin/dashboard'
     }
     // 其他页面直接放行
     return true

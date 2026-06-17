@@ -136,7 +136,7 @@ import { useUserStore } from '@/stores/user'
 //  1. 精准导入 API 文件里真实暴露的名字
 import { getPlanListAPI, deleteRouteAPI, savePlanAPI } from '@/api/plan'
 import { getTodoListAPI, saveTodoAPI } from '@/api/todo'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const userStore = useUserStore()
 const loading = ref(false)
@@ -193,8 +193,38 @@ const handleDeleteRoute = async (routeId) => {
 }
 
 //  6.剥离单个任务节点 (替换掉你之前的 deleteStep)
+const confirmAction = async (message, title = '提示') => {
+  try {
+    await ElMessageBox.confirm(message, title, {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
+const promptText = async (message, title, options = {}) => {
+  try {
+    const { value } = await ElMessageBox.prompt(message, title, {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPlaceholder: options.placeholder || '',
+      inputValue: options.value || '',
+      inputPattern: options.required === false ? undefined : /\S/,
+      inputErrorMessage: options.errorMessage || '请输入有效内容'
+    })
+    return (value || '').trim()
+  } catch (error) {
+    return ''
+  }
+}
+
 const deleteStep = async (planIndex, stepIndex) => {
-  if (!confirm('确定要删除这条路线中的该任务吗？')) return
+  const confirmed = await confirmAction('确定要删除这条路线中的该任务吗？')
+  if (!confirmed) return
   plans.value[planIndex].tasks.splice(stepIndex, 1)
   await persistPlans('任务节点已成功剥离！')
 }
@@ -206,9 +236,11 @@ const togglePlan = (index) => {
 
 // 【提醒】新增路线和插入任务目前是纯前端操作，刷新会丢失。
 // 等 AI 接口调通后，这部分也会变成真实 API 交互！
-const createNewPlan = () => {
-  const title = prompt('请输入新规划的名称:')
-  if (!title || !title.trim()) return
+const createNewPlan = async () => {
+  const title = await promptText('请输入新规划的名称', '新增独立规划路线', {
+    placeholder: '如：监督学习复习路线'
+  })
+  if (!title) return
   plans.value.push({
     id: Date.now(), title: title, isCollapsed: false, isAiGenerated: false,
     tasks: [{ id: Date.now() + 1, title: '准备开始的第一步', desc: '点击下方在此处插入新任务。', status: 'pending', isCustom: true, resources: [] }]
@@ -216,10 +248,15 @@ const createNewPlan = () => {
   persistPlans('新规划路线已保存')
 }
 
-const insertTask = (planIndex, targetStepIndex) => {
-  const taskTitle = prompt('请输入你要插入的任务名称:')
-  if (!taskTitle || !taskTitle.trim()) return
-  const taskDesc = prompt('请输入任务描述（可选）:') || '学生自主补充的个性化学习任务。'
+const insertTask = async (planIndex, targetStepIndex) => {
+  const taskTitle = await promptText('请输入你要插入的任务名称', '插入学习任务', {
+    placeholder: '如：完成混淆矩阵专项练习'
+  })
+  if (!taskTitle) return
+  const taskDesc = await promptText('请输入任务描述（可选）', '任务描述', {
+    required: false,
+    placeholder: '如：结合例题区分准确率、精确率和召回率'
+  }) || '学生自主补充的个性化学习任务。'
 
   const newTask = {
     id: Date.now(), title: taskTitle, desc: taskDesc, status: 'pending', isCustom: true, resources: []
@@ -229,8 +266,10 @@ const insertTask = (planIndex, targetStepIndex) => {
 }
 
 const addGlobalTask = async () => {
-  const content = prompt('请输入待办事项:')
-  if (!content || !content.trim()) return
+  const content = await promptText('请输入待办事项', '新增独立待办', {
+    placeholder: '如：复习第4章模型评估'
+  })
+  if (!content) return
   myTasks.value.push({ id: Date.now(), content: content, done: false })
   await persistTodos()
 }

@@ -3,6 +3,7 @@ import request from '@/utils/request'
 
 // 大盘统计
 export const getAdminStatsAPI = () => request({ url: '/admin/dashboard/stats', method: 'get' })
+export const getAdminReadinessAPI = () => request({ url: '/admin/readiness', method: 'get' })
 
 // 学生管理
 export const getAllStudentsAPI = () => request({ url: '/admin/students/list', method: 'get' })

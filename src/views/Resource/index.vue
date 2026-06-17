@@ -17,16 +17,28 @@
       </div>
     </div>
 
-    <div class="upload-action-bar" style="margin-bottom: 20px;">
-      <el-button type="primary" @click="openUploadDialog">+ 贡献/上传初始课程资源</el-button>
-      <el-button type="warning" plain @click="handleProposeNewType">
-         申请新资源分类
-      </el-button>
+    <div class="resource-toolbar">
+      <div class="search-box">
+        <el-input
+          v-model="searchKeyword"
+          clearable
+          placeholder="搜索知识点、资源名称、来源或正文内容"
+        />
+        <span class="result-count">
+          已筛选 {{ filteredResources.length }} / {{ rawResources.length }} 份
+        </span>
+      </div>
+      <div class="upload-action-bar">
+        <el-button type="primary" @click="openUploadDialog">+ 贡献/上传初始课程资源</el-button>
+        <el-button type="warning" plain @click="handleProposeNewType">
+          申请新资源分类
+        </el-button>
+      </div>
     </div>
 
     <el-empty 
       v-if="filteredResources.length === 0" 
-      description="该分类下暂无已放行的资源，去上传一份等待管理员审批吧~" 
+      :description="searchKeyword ? '没有匹配到资源，换个关键词试试' : '该分类下暂无已放行的资源，去上传一份等待管理员审批吧~'" 
     />
 
     <div v-else class="resource-grid">
@@ -59,6 +71,7 @@
             <el-option label="知识点思维导图" value="知识点思维导图" />
             <el-option label="不同类型练习题目" value="不同类型练习题目" />
             <el-option label="拓展阅读材料" value="拓展阅读材料" />
+            <el-option label="多模态学习包" value="多模态学习包" />
             <el-option label="错题诊断与学习反馈报告" value="错题诊断与学习反馈报告" />
             <el-option label="学科实践应用任务" value="学科实践应用任务" />
           </el-select>
@@ -84,6 +97,36 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="typeApplyVisible" title="申请新资源分类" width="460px" destroy-on-close>
+      <el-form :model="typeApplyForm" label-width="86px" label-position="left">
+        <el-form-item label="分类名称">
+          <el-input
+            v-model="typeApplyForm.name"
+            maxlength="20"
+            show-word-limit
+            placeholder="如：阶段性模拟试卷"
+            @keyup.enter="submitNewTypeApplication"
+          />
+        </el-form-item>
+        <el-form-item label="申请说明">
+          <el-input
+            v-model="typeApplyForm.reason"
+            type="textarea"
+            :rows="3"
+            maxlength="80"
+            show-word-limit
+            placeholder="说明这个分类适合承载哪些学习资源"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="typeApplyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="typeApplyLoading" @click="submitNewTypeApplication">
+          提交申请
+        </el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="detailVisible" title="学习资源详情" width="760px" destroy-on-close>
       <div v-if="selectedResource" class="resource-detail">
         <h3>{{ selectedResource.title }}</h3>
@@ -92,9 +135,15 @@
           <span>来源：{{ selectedResource.source || selectedResource.uploader || '课程资源库' }}</span>
         </div>
         <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
+        <div v-if="selectedResource.safety_review && selectedResource.safety_review.risk_level" class="safety-note">
+          <span>内容自检</span>
+          <strong>{{ selectedResource.safety_review.risk_level }}</strong>
+          <em>{{ selectedResource.safety_review.score }}分，已进入管理员审核链路</em>
+        </div>
         <MarkdownRenderer :content="selectedResource.content || '暂无正文内容'" />
       </div>
       <template #footer>
+        <el-button v-if="selectedResource" @click="downloadPptx(selectedResource)">导出PPT</el-button>
         <el-button type="primary" @click="detailVisible = false">我知道了</el-button>
       </template>
     </el-dialog>
@@ -110,6 +159,13 @@ import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
 
 const loading = ref(false)
 const rawResources = ref([]) // 从后端拿到的全量“已通过”资源
+const searchKeyword = ref('')
+const typeApplyVisible = ref(false)
+const typeApplyLoading = ref(false)
+const typeApplyForm = ref({
+  name: '',
+  reason: ''
+})
 
 const tabs = ref(['全部']) // 初始只有全部
 const currentTab = ref('全部')
@@ -136,14 +192,35 @@ const fetchTypesAndResources = async () => {
   }
 }
 
-//  在“贡献上传资源”弹窗旁边，还可以再加一个小按钮：【申请新分类】
-const handleProposeNewType = async () => {
-  const newTypeName = prompt('请输入你想申请的新资源分类名称 (如: 阶段性模拟试卷):')
-  if (!newTypeName || !newTypeName.trim()) return
-  
-  const res = await proposeTypeAPI(newTypeName.trim())
-  if (res && res.code === 200) {
-    ElMessage.success('申请已提交后台！等管理员同意后，本页面的 Tab 栏会自动多出这一项！')
+const handleProposeNewType = () => {
+  typeApplyForm.value = {
+    name: '',
+    reason: ''
+  }
+  typeApplyVisible.value = true
+}
+
+const submitNewTypeApplication = async () => {
+  const newTypeName = typeApplyForm.value.name.trim()
+
+  if (!newTypeName) {
+    return ElMessage.warning('请填写资源分类名称')
+  }
+  if (tabs.value.includes(newTypeName)) {
+    return ElMessage.warning('该分类已经存在')
+  }
+
+  typeApplyLoading.value = true
+  try {
+    const res = await proposeTypeAPI(newTypeName)
+    if (res && res.code === 200) {
+      ElMessage.success('申请已提交后台！管理员通过后，本页面会自动出现该分类。')
+      typeApplyVisible.value = false
+    }
+  } catch (error) {
+    console.error('申请新分类失败:', error)
+  } finally {
+    typeApplyLoading.value = false
   }
 }
 
@@ -153,20 +230,38 @@ onMounted(() => {
 
 // 2. 核心计算属性：根据当前点击的 Tab，动态过滤要展示的卡片
 const filteredResources = computed(() => {
-  if (currentTab.value === '全部') {
-    return rawResources.value
-  }
   const aliases = {
     '专业课程讲解文档': ['专业课程讲解文档', '课程文档', '文档'],
     '知识点思维导图': ['知识点思维导图', '思维导图', '导图'],
     '不同类型练习题目': ['不同类型练习题目', '练习题目', '练习题', '题库', '试卷'],
     '拓展阅读材料': ['拓展阅读材料', '拓展阅读', '阅读材料'],
+    '多模态学习包': ['多模态学习包', '多模态课件脚本', '课件脚本', 'PPT', '图解', '分镜', '流程图', '代码注释', '题解'],
     '错题诊断与学习反馈报告': ['错题诊断与学习反馈报告', '错题诊断', '学习反馈', '诊断报告', '反馈报告'],
     '学科实践应用任务': ['学科实践应用任务', '实践应用', '应用任务', '实践任务', '项目案例', '实验探究', '材料分析', '写作任务', '代码类实操案例', '实操案例', '代码案例']
   }
   const matchTypes = aliases[currentTab.value] || [currentTab.value]
+  const keyword = searchKeyword.value.trim().toLowerCase()
+
   return rawResources.value.filter(item => {
-    return matchTypes.some(type => item.type.includes(type) || type.includes(item.type))
+    const itemType = item.type || ''
+    const typeMatched = currentTab.value === '全部'
+      ? true
+      : matchTypes.some(type => itemType.includes(type) || type.includes(itemType))
+
+    if (!typeMatched) return false
+    if (!keyword) return true
+
+    const searchableText = [
+      item.id,
+      item.title,
+      item.type,
+      item.summary,
+      item.source,
+      item.uploader,
+      item.content
+    ].join('\n').toLowerCase()
+
+    return searchableText.includes(keyword)
   })
 })
 
@@ -178,6 +273,7 @@ const handleTabClick = (tab) => {
 const getCoverClass = (type) => {
   if (type.includes('导图')) return 'mindmap-cover'
   if (type.includes('文档')) return 'doc-cover'
+  if (type.includes('多模态') || type.includes('课件')) return 'media-cover'
   if (type.includes('诊断') || type.includes('反馈')) return 'feedback-cover'
   if (type.includes('实践') || type.includes('应用')) return 'practice-cover'
   return 'mindmap-cover' // 默认兜底
@@ -216,6 +312,11 @@ const handleView = (item) => {
   selectedResource.value = item
   detailVisible.value = true
 }
+
+const downloadPptx = (item) => {
+  if (!item?.id) return
+  window.open(`http://127.0.0.1:8000/api/resource/export/pptx/${encodeURIComponent(item.id)}`, '_blank')
+}
 </script>
 
 <style scoped>
@@ -242,6 +343,8 @@ const handleView = (item) => {
 .category-tabs {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .tab {
   padding: 6px 16px;
@@ -262,6 +365,40 @@ const handleView = (item) => {
   background: #1890ff;
   color: #fff;
   border-color: #1890ff;
+}
+
+.resource-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  max-width: 600px;
+}
+
+.search-box :deep(.el-input) {
+  max-width: 420px;
+}
+
+.result-count {
+  flex-shrink: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.upload-action-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* 网格布局：自适应列数 */
@@ -296,6 +433,7 @@ const handleView = (item) => {
 .doc-cover { background: linear-gradient(135deg, #ffd194 0%, #70e1f5 100%); }
 .feedback-cover { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); }
 .practice-cover { background: linear-gradient(135deg, #fddb92 0%, #d1fdff 100%); }
+.media-cover { background: linear-gradient(135deg, #89f7fe 0%, #f6d365 100%); }
 
 .tag {
   background: rgba(255, 255, 255, 0.8);
@@ -343,4 +481,43 @@ const handleView = (item) => {
 .resource-detail h3 { margin: 0 0 12px; color: #1f2937; }
 .detail-meta { display: flex; align-items: center; gap: 10px; color: #6b7280; margin-bottom: 14px; }
 .summary { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; color: #374151; line-height: 1.7; }
+.safety-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 12px;
+}
+.safety-note em {
+  color: #4b5563;
+  font-style: normal;
+}
+
+@media (max-width: 900px) {
+  .filter-header,
+  .resource-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .category-tabs,
+  .upload-action-bar {
+    justify-content: flex-start;
+  }
+
+  .search-box {
+    max-width: none;
+    flex-wrap: wrap;
+  }
+
+  .search-box :deep(.el-input) {
+    max-width: none;
+  }
+}
 </style>
