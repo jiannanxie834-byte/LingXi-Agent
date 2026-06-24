@@ -15,8 +15,7 @@ export const useUserStore = defineStore('user', () => {
   //   1：补上角色状态，这关系到你的管理员任意门！
   const role = ref(sessionStorage.getItem('role') || '')
 
-  // 个性签名：正常读取缓存，若没有则给个 UI 兜底提示
-  const bio = ref(sessionStorage.getItem('bio') || '这个人十分神秘，什么都没留下哟')
+  const bio = ref(sessionStorage.getItem('bio') || '')
 
   // 登录状态：有 token 就认为已登录
   const isLoggedIn = ref(!!sessionStorage.getItem('token'))
@@ -59,8 +58,7 @@ export const useUserStore = defineStore('user', () => {
     //  2：接收后端的 role
     role.value = userInfo.role || 'student'
 
-    // 如果后端传了 bio 就用后端的，没传再用默认兜底
-    bio.value = userInfo.bio || '这个人十分神秘，什么都没留下哟'
+    bio.value = userInfo.bio || ''
 
     isLoggedIn.value = true
 

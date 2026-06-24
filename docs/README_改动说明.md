@@ -199,7 +199,7 @@ SPARK_MODEL=lite
 SPARK_API_PASSWORD=你的 APIPassword
 ```
 
-没有 API Key 时，系统会自动使用本地课程知识库兜底，不影响运行和演示。
+当前版本要求配置可用的大模型 Key。大模型调用失败时，系统会明确返回错误原因，不再用本地模板假装生成成功，避免演示时出现“看起来回答了但实际没有识别/生成”的误导。
 
 ### 7. 工程化清理
 
@@ -217,6 +217,63 @@ DATABASE_URL=mysql+pymysql://root@127.0.0.1:3306/lingxi?charset=utf8mb4
 ```
 
 历史 SQLite 文件 `lingxi.db` 保留为本地备用/旧测试文件，不作为当前正式演示数据源。
+
+## 七、2026-06-23 当前未提交改动
+
+### 1. 学生端资源推荐改为隐式机制
+
+- 学生资源库保留“为你推荐”入口，但不再展示推荐分数。
+- 资源卡片不再展示“命中标签”“推荐原因”等内部依据。
+- 资源详情弹窗不再展示“个性化推荐指数”“命中标签”“推荐理由列表”。
+- 前端仍然调用推荐接口，资源排序和筛选由系统隐藏完成。
+- 这样更接近真实产品体验：学生看到的是被推荐的学习资料，不需要看到算法解释过程。
+
+### 2. 后端推荐接口收口
+
+- 推荐算法内部仍计算排序分，用 `_recommend_rank` 作为临时字段。
+- 排序完成后会删除 `_recommend_rank`，接口返回中不暴露内部推荐分。
+- 接口不再返回 `recommend_score`、`recommend_reasons`、`recommend_breakdown`、`matched_tags`。
+- 删除了不再使用的推荐理由拼接函数，避免代码层继续维护显式推荐文案。
+
+### 3. 已验证内容
+
+- 前端构建通过：
+
+```bash
+cd /Users/rinko/Documents/软件杯/LingXi-Agent
+npm run build
+```
+
+- 后端语法编译通过：
+
+```bash
+cd /Users/rinko/Documents/软件杯/LingXi-Backend
+PYTHONPYCACHEPREFIX=/private/tmp/lingxi_pycache .venv/bin/python -m compileall app
+```
+
+### 4. 建议人工测试路径
+
+1. 启动后端：
+
+```bash
+cd /Users/rinko/Documents/软件杯/LingXi-Backend
+source .venv/bin/activate
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+2. 启动前端：
+
+```bash
+cd /Users/rinko/Documents/软件杯/LingXi-Agent
+npm run dev
+```
+
+3. 学生端登录后进入“资源”页。
+4. 默认进入“为你推荐”分类，确认能看到推荐资源卡片。
+5. 检查资源卡片：只展示资源类型、资源标题、资源编码和“查阅资源”，不出现推荐分数、命中标签、推荐原因。
+6. 点击“查阅资源”进入详情，确认详情中只展示资源类型、来源、摘要、安全自检和正文，不出现推荐指数、命中标签、推荐理由。
+7. 切换“全部”和其他资源分类，确认资源列表和搜索功能正常。
+8. 打开浏览器开发者工具 Network，查看 `/api/resource/recommendations` 响应，确认单条资源中没有 `recommend_score`、`recommend_reasons`、`recommend_breakdown`、`matched_tags`、`_recommend_rank`。
 
 本次代码会自动补齐新增字段和新表：
 

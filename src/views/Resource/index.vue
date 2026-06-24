@@ -25,7 +25,7 @@
           placeholder="搜索知识点、资源名称、来源或正文内容"
         />
         <span class="result-count">
-          已筛选 {{ filteredResources.length }} / {{ rawResources.length }} 份
+          已筛选 {{ filteredResources.length }} / {{ sourceResourceCount }} 份
         </span>
       </div>
       <div class="upload-action-bar">
@@ -38,7 +38,7 @@
 
     <el-empty 
       v-if="filteredResources.length === 0" 
-      :description="searchKeyword ? '没有匹配到资源，换个关键词试试' : '该分类下暂无已放行的资源，去上传一份等待管理员审批吧~'" 
+      :description="emptyDescription" 
     />
 
     <div v-else class="resource-grid">
@@ -143,7 +143,7 @@
         <MarkdownRenderer :content="selectedResource.content || '暂无正文内容'" />
       </div>
       <template #footer>
-        <el-button v-if="selectedResource" @click="downloadPptx(selectedResource)">导出PPT</el-button>
+        <el-button v-if="selectedResource && !selectedResource.auto_pushed" @click="downloadPptx(selectedResource)">导出PPT</el-button>
         <el-button type="primary" @click="detailVisible = false">我知道了</el-button>
       </template>
     </el-dialog>
@@ -154,11 +154,21 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 //  引入接口：只拿通过审核的资源，以及前台上传接口
-import { getPassedTypesAPI, getPassedResourcesAPI, proposeTypeAPI, uploadResourceAPI } from '@/api/resource'
+import {
+  getPassedTypesAPI,
+  getPassedResourcesAPI,
+  getRecommendedResourcesAPI,
+  proposeTypeAPI,
+  uploadResourceAPI
+} from '@/api/resource'
 import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
+import { useUserStore } from '@/stores/user'
 
 const loading = ref(false)
+const userStore = useUserStore()
 const rawResources = ref([]) // 从后端拿到的全量“已通过”资源
+const recommendedResources = ref([])
+const recommendLoadFailed = ref(false)
 const searchKeyword = ref('')
 const typeApplyVisible = ref(false)
 const typeApplyLoading = ref(false)
@@ -166,9 +176,8 @@ const typeApplyForm = ref({
   name: '',
   reason: ''
 })
-
-const tabs = ref(['全部']) // 初始只有全部
-const currentTab = ref('全部')
+const tabs = ref(['为你推荐', '全部'])
+const currentTab = ref('为你推荐')
 
 //  页面加载时，既拉取资源，也拉取动态分类
 const fetchTypesAndResources = async () => {
@@ -177,16 +186,28 @@ const fetchTypesAndResources = async () => {
     // 1. 从后端拿已经通过审核的动态分类
     const typeRes = await getPassedTypesAPI()
     if (typeRes && typeRes.code === 200) {
-      tabs.value = ['全部', ...typeRes.data] // 把后端给的 6 种以上类型动态拼到全部后面
+      tabs.value = ['为你推荐', '全部', ...typeRes.data] // 把后端给的 6 种以上类型动态拼到全部后面
     }
     
-    // 2. 拿通过的资源数据
+    // 2. 拿通过的资源数据和个性化推荐数据，两类结果分别展示。
     const res = await getPassedResourcesAPI()
     if (res && res.code === 200) {
-      rawResources.value = res.data
+      rawResources.value = res.data || []
+    }
+
+    const recommendRes = await getRecommendedResourcesAPI(userStore.username || 'student', 12)
+    if (recommendRes && recommendRes.code === 200) {
+      recommendedResources.value = recommendRes.data || []
+      recommendLoadFailed.value = false
+    } else {
+      recommendLoadFailed.value = true
+      recommendedResources.value = []
+      ElMessage.error(recommendRes?.message || '个性化推荐加载失败')
     }
   } catch (error) {
+    recommendLoadFailed.value = true
     console.error(error)
+    ElMessage.error('资源数据加载失败')
   } finally {
     loading.value = false
   }
@@ -212,7 +233,11 @@ const submitNewTypeApplication = async () => {
 
   typeApplyLoading.value = true
   try {
-    const res = await proposeTypeAPI(newTypeName)
+    const res = await proposeTypeAPI(
+      newTypeName,
+      userStore.username,
+      typeApplyForm.value.reason.trim()
+    )
     if (res && res.code === 200) {
       ElMessage.success('申请已提交后台！管理员通过后，本页面会自动出现该分类。')
       typeApplyVisible.value = false
@@ -226,6 +251,22 @@ const submitNewTypeApplication = async () => {
 
 onMounted(() => {
   fetchTypesAndResources()
+})
+
+const isRecommendTab = computed(() => currentTab.value === '为你推荐')
+
+const sourceResources = computed(() => {
+  if (!isRecommendTab.value) return rawResources.value
+  return recommendedResources.value
+})
+
+const sourceResourceCount = computed(() => sourceResources.value.length)
+
+const emptyDescription = computed(() => {
+  if (searchKeyword.value) return '没有匹配到资源，换个关键词试试'
+  if (isRecommendTab.value && recommendLoadFailed.value) return '个性化推荐加载失败，请检查后端推荐服务'
+  if (isRecommendTab.value) return '当前画像和学习记录暂未匹配到推荐资源'
+  return '该分类下暂无已放行的资源，去上传一份等待管理员审批吧~'
 })
 
 // 2. 核心计算属性：根据当前点击的 Tab，动态过滤要展示的卡片
@@ -242,9 +283,9 @@ const filteredResources = computed(() => {
   const matchTypes = aliases[currentTab.value] || [currentTab.value]
   const keyword = searchKeyword.value.trim().toLowerCase()
 
-  return rawResources.value.filter(item => {
+  return sourceResources.value.filter(item => {
     const itemType = item.type || ''
-    const typeMatched = currentTab.value === '全部'
+    const typeMatched = isRecommendTab.value || currentTab.value === '全部'
       ? true
       : matchTypes.some(type => itemType.includes(type) || type.includes(itemType))
 
@@ -276,7 +317,7 @@ const getCoverClass = (type) => {
   if (type.includes('多模态') || type.includes('课件')) return 'media-cover'
   if (type.includes('诊断') || type.includes('反馈')) return 'feedback-cover'
   if (type.includes('实践') || type.includes('应用')) return 'practice-cover'
-  return 'mindmap-cover' // 默认兜底
+  return 'generic-cover'
 }
 
 //  4. 前台贡献上传资源逻辑
@@ -295,7 +336,10 @@ const submitUpload = async () => {
     return ElMessage.warning('请将资源名称和类型填写完整')
   }
   try {
-    const res = await uploadResourceAPI(uploadForm.value)
+    const res = await uploadResourceAPI({
+      ...uploadForm.value,
+      username: userStore.username
+    })
     if (res && res.code === 200) {
       ElMessage.success('上传成功！已送往管理后台进行合规性审核，通过后会自动在此展现。')
       uploadVisible.value = false
@@ -315,7 +359,7 @@ const handleView = (item) => {
 
 const downloadPptx = (item) => {
   if (!item?.id) return
-  window.open(`http://127.0.0.1:8000/api/resource/export/pptx/${encodeURIComponent(item.id)}`, '_blank')
+  window.open(`/api/resource/export/pptx/${encodeURIComponent(item.id)}`, '_blank')
 }
 </script>
 
@@ -427,6 +471,8 @@ const downloadPptx = (item) => {
   padding: 12px;
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 /* 唯美渐变色 */
 .mindmap-cover { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); }
@@ -434,6 +480,7 @@ const downloadPptx = (item) => {
 .feedback-cover { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); }
 .practice-cover { background: linear-gradient(135deg, #fddb92 0%, #d1fdff 100%); }
 .media-cover { background: linear-gradient(135deg, #89f7fe 0%, #f6d365 100%); }
+.generic-cover { background: linear-gradient(135deg, #dbeafe 0%, #e5e7eb 100%); }
 
 .tag {
   background: rgba(255, 255, 255, 0.8);
@@ -461,6 +508,7 @@ const downloadPptx = (item) => {
   font-size: 13px;
   color: #999;
 }
+
 .action-bar {
   display: flex;
   justify-content: flex-end;
@@ -519,5 +567,6 @@ const downloadPptx = (item) => {
   .search-box :deep(.el-input) {
     max-width: none;
   }
+
 }
 </style>

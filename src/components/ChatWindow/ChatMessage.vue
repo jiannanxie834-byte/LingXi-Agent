@@ -11,47 +11,47 @@
       </div>
 
       <template v-else>
-        <div v-if="message.progressSteps && message.progressSteps.length" class="agent-progress">
-          <div class="progress-title">多智能体处理链路</div>
-          <div
-            v-for="step in message.progressSteps"
-            :key="step.key || step.label"
-            class="progress-step"
-            :class="`status-${step.status || 'completed'}`"
-          >
-            <span class="step-dot"></span>
-            <div class="step-main">
-              <div class="step-label">{{ step.label }}</div>
-              <div class="step-detail">
-                {{ step.agent || 'Agent' }}<span v-if="step.detail"> · {{ step.detail }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="message.safetySummary && message.safetySummary.total" class="safety-summary">
-          <span>内容自检</span>
-          <strong>{{ message.safetySummary.risk_level }}</strong>
-          <em>{{ message.safetySummary.total }} 份资源 · 平均 {{ message.safetySummary.avg_score }} 分</em>
-        </div>
-
-        <div v-if="message.evidence && message.evidence.length" class="evidence-panel">
-          <div class="evidence-title">知识库依据</div>
-          <div
-            v-for="item in message.evidence"
-            :key="`${item.kind || 'evidence'}-${item.resource_id || item.title}`"
-            class="evidence-item"
-          >
-            <div class="evidence-head">
-              <span class="evidence-name">{{ item.title }}</span>
-              <span class="evidence-kind">{{ evidenceKindLabel(item) }}</span>
-            </div>
-            <div class="evidence-source">{{ item.source || '课程知识库' }}</div>
-            <div class="evidence-excerpt">{{ item.excerpt }}</div>
-          </div>
+        <div v-if="statusText" class="status-line" :class="{ pending: message.isPending, error: message.isError }">
+          <span class="status-dot"></span>
+          <span>{{ statusText }}</span>
         </div>
 
         <MarkdownRenderer :content="message.content" />
+
+        <div v-if="productCards.length" class="result-cards">
+          <button
+            v-for="card in productCards"
+            :key="card.id"
+            type="button"
+            class="result-card"
+            :class="{ clickable: card.actionRoute }"
+            @click="handleCardClick(card)"
+          >
+            <div class="card-head">
+              <strong>{{ card.title }}</strong>
+              <span>{{ card.badge }}</span>
+            </div>
+            <p>{{ card.summary }}</p>
+            <div v-if="card.items && card.items.length" class="card-items">
+              <span v-for="item in card.items" :key="`${item.type}-${item.title}`">
+                {{ item.title }}
+              </span>
+            </div>
+            <em v-if="card.actionText">{{ card.actionText }}</em>
+          </button>
+        </div>
+
+        <div v-if="showAgentTrace && traceSteps.length" class="trace-strip">
+          <div
+            v-for="step in traceSteps"
+            :key="step.key || step.label"
+            class="trace-step"
+            :class="`status-${step.status || 'completed'}`"
+          >
+            <span class="trace-dot"></span>
+            <span>{{ step.label }}</span>
+          </div>
+        </div>
       </template>
     </div>
 
@@ -60,7 +60,9 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
+import { LEARNING_ROUTE_TYPES, PLAIN_ROUTE_TYPES, SHOW_AGENT_TRACE } from '@/api/chat'
 
 // 接收父组件（首页）传过来的消息对象
 const props = defineProps({
@@ -70,12 +72,109 @@ const props = defineProps({
   }
 })
 
+const router = useRouter()
+
 // 计算属性：判断这条消息是不是用户发的
 const isUser = computed(() => props.message.role === 'user')
 
-const evidenceKindLabel = (item) => {
-  if (item.resource_type) return item.resource_type
-  return item.kind === 'resource' ? '已审核资源' : '课程知识点'
+const showAgentTrace = SHOW_AGENT_TRACE
+
+const routeType = computed(() => props.message.routeType || props.message.route_type || '')
+const isPlainRoute = computed(() => {
+  return PLAIN_ROUTE_TYPES.has(routeType.value) || props.message.contentType === 'conversation_reply'
+})
+const canShowLearningStatus = computed(() => {
+  return LEARNING_ROUTE_TYPES.has(routeType.value) || (!routeType.value && !isPlainRoute.value)
+})
+
+const statusLabel = (status) => {
+  const map = {
+    ready: '已生成',
+    pending_review: '待审核',
+    pending: '进行中',
+    completed: '已完成',
+    failed: '失败',
+    requires_review: '需复核'
+  }
+  return map[status] || status || '已完成'
+}
+
+const statusText = computed(() => {
+  if (isUser.value) return ''
+  if (props.message.isIntro) return ''
+  if (props.message.isError) return '生成失败，请稍后重试'
+  if (props.message.isPending) return '正在整理学习建议'
+  if (!canShowLearningStatus.value) return ''
+  if ((props.message.cards || []).some(card => card.type === 'resource_review')) {
+    return '学习建议已生成，配套资料正在整理'
+  }
+  return props.message.content ? '学习建议已生成' : ''
+})
+
+const traceSteps = computed(() => {
+  if (!showAgentTrace || !canShowLearningStatus.value) return []
+  return (props.message.progress || []).filter(step => step?.label)
+})
+
+const productCards = computed(() => {
+  if (!canShowLearningStatus.value) return []
+  const cards = props.message.cards || []
+  const result = []
+
+  cards.forEach((card, index) => {
+    if (card.type === 'learning_path') {
+      result.push({
+        id: `path-${index}-${card.title}`,
+        title: '学习路线已生成',
+        badge: statusLabel(card.status || 'ready'),
+        summary: card.summary || '已为你整理出可执行的学习步骤，可进入规划页继续查看。',
+        actionText: card.action_text || '查看规划',
+        actionRoute: card.action_route || '/plan',
+        items: []
+      })
+      return
+    }
+
+    if (card.type === 'resource_review') {
+      result.push({
+        id: `resource-pending-${index}-${card.title}`,
+        title: '配套资料整理中',
+        badge: statusLabel(card.status || 'pending'),
+        summary: card.summary || '配套资料正在整理，完成后会进入资源库。',
+        actionText: card.action_text || '查看资源库',
+        actionRoute: card.action_route || '/resource',
+        items: (card.items || []).slice(0, 4)
+      })
+      result.push({
+        id: `resource-review-${index}-${card.title}`,
+        title: '审核通过后进入资源库',
+        badge: '待发布',
+        summary: '资料通过审核后会自动出现在资源库，你可以在资源页继续学习和收藏。',
+        actionText: card.action_text || '查看资源库',
+        actionRoute: card.action_route || '/resource',
+        items: []
+      })
+      return
+    }
+
+    result.push({
+      id: `card-${index}-${card.title}`,
+      title: card.title || '学习内容已准备',
+      badge: statusLabel(card.status),
+      summary: card.summary || '',
+      actionText: card.action_text || '',
+      actionRoute: card.action_route || '',
+      items: card.items || []
+    })
+  })
+
+  return result
+})
+
+const handleCardClick = (card) => {
+  if (card?.actionRoute) {
+    router.push(card.actionRoute)
+  }
 }
 </script>
 
@@ -83,8 +182,8 @@ const evidenceKindLabel = (item) => {
 /* 消息整体外层，使用 flex 布局 */
 .message-wrapper {
   display: flex;
-  margin-bottom: 24px;
-  gap: 16px;
+  margin-bottom: 14px;
+  gap: 12px;
 }
 
 /* 🌟 核心：如果是用户消息，反转 flex 方向，让头像和气泡靠右！ */
@@ -94,8 +193,8 @@ const evidenceKindLabel = (item) => {
 
 /* 头像样式 */
 .avatar {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background-color: #f0f2f5;
   color: #666;
@@ -117,9 +216,9 @@ const evidenceKindLabel = (item) => {
 
 /* 气泡外壳样式 */
 .bubble {
-  max-width: 75%; /* 限制气泡最大宽度，防止霸屏 */
-  padding: 12px 16px;
-  border-radius: 12px;
+  max-width: 86%;
+  padding: 10px 14px;
+  border-radius: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
@@ -145,160 +244,157 @@ const evidenceKindLabel = (item) => {
   font-size: 15px;
 }
 
-.agent-progress {
-  margin-bottom: 12px;
-  padding: 12px;
-  border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-}
-
-.progress-title {
-  margin-bottom: 8px;
-  color: #1f2937;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.progress-step {
+.status-line {
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 7px 0;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-.step-dot {
-  width: 9px;
-  height: 9px;
-  margin-top: 5px;
+.status-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #16a34a;
   flex-shrink: 0;
 }
 
-.status-running .step-dot {
+.status-line.pending .status-dot {
   background: #1677ff;
-  box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.12);
+  box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.1);
 }
 
-.status-pending .step-dot {
-  background: #cbd5e1;
+.status-line.error .status-dot {
+  background: #dc2626;
 }
 
-.status-skipped .step-dot {
-  background: #cbd5e1;
+.result-cards {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.status-fallback .step-dot {
-  background: #f59e0b;
+.result-card {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  text-align: left;
+  color: #1f2937;
 }
 
-.step-main {
-  min-width: 0;
+.result-card.clickable {
+  cursor: pointer;
 }
 
-.step-label {
-  color: #111827;
+.result-card.clickable:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-head strong {
   font-size: 13px;
   line-height: 1.4;
+}
+
+.card-head span {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 11px;
+}
+
+.result-card p {
+  margin: 6px 0 0;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.card-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.card-items span {
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  color: #4b5563;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-card em {
+  display: inline-block;
+  margin-top: 8px;
+  color: #1677ff;
+  font-size: 12px;
+  font-style: normal;
   font-weight: 600;
 }
 
-.step-detail {
-  margin-top: 2px;
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 1.45;
-  word-break: break-word;
-}
-
-.safety-summary {
+.trace-strip {
   display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #eef2f7;
+}
+
+.trace-step {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  color: #166534;
-  font-size: 12px;
-}
-
-.safety-summary strong {
-  font-size: 12px;
-}
-
-.safety-summary em {
-  color: #4b5563;
-  font-style: normal;
-}
-
-.evidence-panel {
-  margin-bottom: 12px;
-  padding: 12px;
-  border-radius: 8px;
-  background: #fffaf0;
-  border: 1px solid #fed7aa;
-}
-
-.evidence-title {
-  color: #92400e;
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.evidence-item {
-  padding: 9px 0;
-  border-top: 1px solid rgba(251, 146, 60, 0.22);
-}
-
-.evidence-item:first-of-type {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.evidence-head {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.evidence-name {
-  min-width: 0;
-  color: #1f2937;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.45;
-  word-break: break-word;
-}
-
-.evidence-kind {
-  flex-shrink: 0;
-  max-width: 120px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: #ffedd5;
-  color: #9a3412;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
   font-size: 11px;
-  line-height: 1.4;
-  text-align: center;
 }
 
-.evidence-source {
-  margin-top: 3px;
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 1.45;
+.trace-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #16a34a;
 }
 
-.evidence-excerpt {
-  margin-top: 5px;
-  color: #374151;
-  font-size: 12px;
-  line-height: 1.65;
-  word-break: break-word;
+.status-running .trace-dot {
+  background: #1677ff;
+}
+
+.status-pending .trace-dot,
+.status-skipped .trace-dot {
+  background: #cbd5e1;
+}
+
+.status-failed .trace-dot {
+  background: #dc2626;
+}
+
+.status-requires_review .trace-dot {
+  background: #f59e0b;
 }
 </style>

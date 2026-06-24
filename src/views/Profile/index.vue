@@ -134,6 +134,28 @@
           </div>
         </template>
         <div ref="radarChartRef" class="radar-chart-container"></div>
+        <div v-if="hasProfileData" class="dimension-grid">
+          <div
+            v-for="item in dimensionItems"
+            :key="item.label"
+            class="dimension-tile"
+          >
+            <div class="dimension-head">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+            <el-progress
+              :percentage="item.value"
+              :stroke-width="7"
+              :show-text="false"
+              :color="item.color"
+            />
+            <p>{{ item.description }}</p>
+          </div>
+        </div>
+        <div v-else class="profile-empty-state">
+          完成一次学习对话或学习评价后，系统会自动生成六维动态画像。
+        </div>
       </el-card>
 
       <div class="grid-right-stack">
@@ -352,22 +374,54 @@ const handleUpdateProfile = async () => {
   }
 }
 
-// 判断当前是否是新注册的用户
-const isNewUser = computed(() => userStore.username !== 'student')
 const displayName = computed(() => userStore.nickname || userStore.username || '学伴新用户')
 const knowledgeTags = computed(() => userStore.tags || [])
 const radarLabels = ['知识基础', '自驱探索力', '实践动手能力', '学习专注度', '易错点修复', '认知匹配度']
 const radarValues = computed(() => {
-  const fallback = isNewUser.value ? [0, 0, 0, 0, 0, 0] : [85, 75, 92, 88, 70, 78]
-  if (!userStore.profileRadar || Object.keys(userStore.profileRadar).length === 0) return fallback
+  if (!userStore.profileRadar || Object.keys(userStore.profileRadar).length === 0) {
+    return radarLabels.map(() => 0)
+  }
   return radarLabels.map(label => Number(userStore.profileRadar[label] || 0))
+})
+const hasProfileData = computed(() => {
+  const radar = userStore.profileRadar || {}
+  const dimensions = userStore.profileDimensions || {}
+  return Object.values(radar).some(value => Number(value) > 0) || Object.keys(dimensions).length > 0
+})
+// 判断当前是否真正没有画像数据，而不是按演示账号名硬编码判断
+const isNewUser = computed(() => !hasProfileData.value)
+const dimensionDescriptions = {
+  知识基础: '综合历史学习、评价和本轮对话估算当前基础。',
+  自驱探索力: '依据主动提问、计划创建和待办推进情况判断。',
+  实践动手能力: '反映实操训练、项目任务和实践资源偏好。',
+  学习专注度: '结合本轮交互长度、学习时长和任务连续性估算。',
+  易错点修复: '来自错题诊断、评价记录和薄弱点修复情况。',
+  认知匹配度: '衡量当前资源、路径与认知风格和主题偏好的匹配程度。'
+}
+const dimensionColor = (value) => {
+  if (value >= 85) return '#16a34a'
+  if (value >= 70) return '#1890ff'
+  if (value >= 55) return '#faad14'
+  return '#f97316'
+}
+const dimensionItems = computed(() => {
+  return radarLabels.map((label, index) => {
+    const rawValue = Number(radarValues.value[index] || 0)
+    const value = Math.max(0, Math.min(100, Math.round(rawValue)))
+    return {
+      label,
+      value,
+      color: dimensionColor(value),
+      description: dimensionDescriptions[label]
+    }
+  })
 })
 const profileAdvice = computed(() => {
   const dimensions = userStore.profileDimensions || {}
   return {
-    style: dimensions['认知风格'] || '视觉-活跃型',
-    weakness: dimensions['知识短板'] || 'Vue3组合式API、计算机网络协议',
-    next: dimensions['学习目标'] ? `围绕「${dimensions['学习目标']}」生成下一轮学习资源与路径。` : '已自动在【规划】页面为您生成《Vue3进阶突击路线》。'
+    style: dimensions['认知风格'] || '待学习数据生成',
+    weakness: dimensions['知识短板'] || '待学习评价生成',
+    next: dimensions['学习目标'] ? `围绕「${dimensions['学习目标']}」生成下一轮学习资源与路径。` : '完成学习对话或评价后，系统将生成下一轮学习资源与路径。'
   }
 })
 
@@ -518,15 +572,16 @@ const initRadarChart = () => {
     },
     series: [{
       type: 'radar',
-      data: isNewUser.value ? [] : [{
+      data: hasProfileData.value ? [{
         value: radarValues.value,
         name: '学情全息动态画像',
         areaStyle: { color: 'rgba(24, 144, 255, 0.25)' },
         lineStyle: { color: '#1890ff', width: 2 },
         itemStyle: { color: '#1890ff' }
-      }]
+      }] : []
     }]
   }
+  myChart.clear()
   myChart.setOption(option)
 }
 
@@ -535,7 +590,7 @@ onMounted(() => {
   window.addEventListener('resize', () => myChart && myChart.resize())
 })
 
-watch(radarValues, () => {
+watch([radarValues, hasProfileData], () => {
   initRadarChart()
 })
 </script>
@@ -719,7 +774,63 @@ watch(radarValues, () => {
 }
 
 /* 雷达图尺寸容器 */
-.radar-chart-container { height: 380px; width: 100%; }
+.radar-chart-container { height: 300px; width: 100%; }
+
+.dimension-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.dimension-tile {
+  padding: 10px 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.dimension-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.dimension-head span {
+  min-width: 0;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.dimension-head strong {
+  flex-shrink: 0;
+  color: #1677ff;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.dimension-tile p {
+  margin: 7px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.profile-empty-state {
+  margin-top: 10px;
+  padding: 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
 
 .grid-right-stack { 
   display: flex; 

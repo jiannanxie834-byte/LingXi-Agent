@@ -65,7 +65,7 @@
         </button>
 
         <span class="header-title">
-          当前对话：多智能体学习助手
+          当前对话：学习助手
         </span>
       </div>
 
@@ -113,7 +113,13 @@ import { ref, reactive, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import ChatMessage from '@/components/ChatWindow/ChatMessage.vue'
-import { getChatMessagesAPI, getChatSessionsAPI, sendChatMessageAPI } from '@/api/chat'
+import {
+  SHOW_AGENT_TRACE,
+  getChatMessagesAPI,
+  getChatSessionsAPI,
+  normalizeStudentChatData,
+  sendChatMessageAPI
+} from '@/api/chat'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -133,8 +139,9 @@ const activeSessionId = ref('')
 
 const welcomeMessage = {
   role: 'ai',
+  isIntro: true,
   content:
-    '你好，我是灵析多智能体学习助手。你可以直接问课程问题、让系统生成练习题、规划学习路线，或要求给出学科实践应用任务。'
+    '你好，我是灵析学习助手。你可以直接问课程问题、生成练习题、规划学习路线，或获取学科实践任务。'
 }
 
 const messageList = ref([{ ...welcomeMessage }])
@@ -143,14 +150,18 @@ const currentUsername = () => userStore.username || 'student'
 
 const activeSessionStorageKey = () => `lingxi_active_chat_${currentUsername()}`
 
-const createPendingPipelineSteps = () => [
-  { key: 'intent', label: '识别学习意图与课程主题', agent: '意图识别 Agent', status: 'running', detail: '解析自然语言输入' },
-  { key: 'evidence', label: '检索课程知识库依据', agent: '知识检索 Agent', status: 'pending', detail: '匹配初始课程知识库和已审核资源' },
-  { key: 'profile', label: '更新动态学习画像', agent: '画像建模 Agent', status: 'pending', detail: '融合历史学习数据' },
-  { key: 'answer', label: '生成个性化辅导回复', agent: '学习辅导 Agent', status: 'pending', detail: '调用大模型生成回答' },
-  { key: 'plan', label: '规划学习路径', agent: '路径规划 Agent', status: 'pending', detail: '按需生成路线' },
-  { key: 'resource-plan', label: '规划配套资源类型', agent: '资源设计 Agent', status: 'pending', detail: '按需生成资源' },
-  { key: 'safety', label: '完成内容安全与防幻觉自检', agent: '内容安全 Agent', status: 'pending', detail: '等待资源生成后复核' }
+const createPendingProgress = () => [
+  ...(SHOW_AGENT_TRACE
+    ? [
+      { key: 'understand', label: '理解需求', status: 'running' },
+      { key: 'collect', label: '整理资料', status: 'pending' },
+      { key: 'profile', label: '更新画像', status: 'pending' },
+      { key: 'answer', label: '生成建议', status: 'pending' },
+      { key: 'plan', label: '生成路线', status: 'pending' },
+      { key: 'resources', label: '整理资源', status: 'pending' },
+      { key: 'check', label: '完成检查', status: 'pending' }
+    ]
+    : [])
 ]
 
 let progressTimer = null
@@ -166,7 +177,7 @@ const startProgressSimulation = (aiMsg) => {
   clearProgressTimer()
   let activeIndex = 0
   progressTimer = setInterval(() => {
-    const steps = aiMsg.progressSteps || []
+    const steps = aiMsg.progress || []
     if (!steps.length || activeIndex >= steps.length - 1) {
       return
     }
@@ -232,13 +243,19 @@ const loadSessionMessages = async (session) => {
 
     const res = await getChatMessagesAPI(session.id, currentUsername())
     if (res && res.code === 200) {
-      const messages = (res.data || []).map(item => ({
-        role: item.role === 'user' ? 'user' : 'ai',
-        content: item.content || '',
-        progressSteps: item.pipeline_steps || item.progress_steps || [],
-        safetySummary: item.safety_summary || null,
-        evidence: item.evidence || []
-      }))
+      const messages = (res.data || []).map(item => {
+        const normalized = normalizeStudentChatData({ data: item })
+        return {
+          role: item.role === 'user' ? 'user' : 'ai',
+          content: item.role === 'user' ? item.content || '' : normalized.content,
+          contentType: normalized.contentType,
+          routeType: normalized.routeType,
+          progress: normalized.progress,
+          cards: normalized.cards,
+          traceId: normalized.traceId,
+          isPending: false
+        }
+      })
       messageList.value = messages.length ? messages : [{ ...welcomeMessage }]
       await scrollToBottom()
     }
@@ -312,10 +329,12 @@ const sendMessage = async () => {
   // =========================
   const aiMsg = reactive({
     role: 'ai',
-    content: '正在组织回答...',
-    progressSteps: createPendingPipelineSteps(),
-    safetySummary: null,
-    evidence: []
+    content: '正在整理学习建议...',
+    contentType: 'student_answer',
+    routeType: '',
+    progress: createPendingProgress(),
+    cards: [],
+    isPending: true
   })
 
   messageList.value.push(aiMsg)
@@ -337,27 +356,29 @@ const sendMessage = async () => {
     // =========================
     // 4. 提取 AI 回复
     // =========================
-    const reply =
-      res?.data?.reply ||
-      res?.data?.data?.reply ||
-      res?.reply ||
-      'AI暂时没有回复'
+    const resultData = normalizeStudentChatData(res)
+    const reply = resultData.content
+
+    if (!reply) {
+      throw new Error('AI未返回有效内容')
+    }
 
     // =========================
     // 5. 替换“思考中...”
     // =========================
     aiMsg.content = reply
+    aiMsg.contentType = resultData.contentType || 'student_answer'
+    aiMsg.routeType = resultData.routeType || ''
+    aiMsg.progress = resultData.progress && resultData.progress.length
+      ? resultData.progress
+      : []
+    aiMsg.cards = resultData.cards || []
+    aiMsg.traceId = resultData.traceId || ''
+    aiMsg.isPending = false
 
-    const resultData = res?.data || {}
-    aiMsg.progressSteps = resultData.pipeline_steps && resultData.pipeline_steps.length
-      ? resultData.pipeline_steps
-      : completePendingSteps(aiMsg.progressSteps)
-    aiMsg.safetySummary = resultData.safety_summary || null
-    aiMsg.evidence = resultData.evidence || []
-
-    if (resultData.session_id) {
-      activeSessionId.value = resultData.session_id
-      sessionStorage.setItem(activeSessionStorageKey(), resultData.session_id)
+    if (resultData.sessionId) {
+      activeSessionId.value = resultData.sessionId
+      sessionStorage.setItem(activeSessionStorageKey(), resultData.sessionId)
     }
 
     if (resultData.session) {
@@ -371,6 +392,7 @@ const sendMessage = async () => {
     // 6. 更新画像
     // =========================
     const profile =
+      resultData.profile ||
       res?.data?.data?.profile ||
       res?.data?.profile
 
@@ -382,10 +404,12 @@ const sendMessage = async () => {
 
     console.error('AI请求失败:', error)
 
-    aiMsg.content = '后端服务异常，请稍后再试'
-    aiMsg.progressSteps = (aiMsg.progressSteps || []).map(step => ({
+    aiMsg.content = error?.message || '后端服务异常，请稍后再试'
+    aiMsg.isPending = false
+    aiMsg.isError = true
+    aiMsg.progress = (aiMsg.progress || []).map(step => ({
       ...step,
-      status: step.status === 'running' ? 'fallback' : step.status
+      status: step.status === 'running' ? 'failed' : step.status
     }))
 
     ElMessage.error('AI请求失败')
@@ -416,7 +440,7 @@ onMounted(() => {
 
 /* ================= 左侧侧边栏 ================= */
 .sidebar {
-  width: 260px;
+  width: 240px;
   background-color: #f7f7f8;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
@@ -428,8 +452,8 @@ onMounted(() => {
 }
 
 .sidebar-content {
-  width: 260px;
-  padding: 20px;
+  width: 240px;
+  padding: 14px;
   height: 100%;
   box-sizing: border-box;
   display: flex;
@@ -438,7 +462,7 @@ onMounted(() => {
 
 .new-chat {
   width: 100%;
-  height: 44px;
+  height: 40px;
   border-radius: 8px;
   border: 1px solid #e5e5e5;
   background: white;
@@ -452,7 +476,7 @@ onMounted(() => {
 }
 
 .history {
-  margin-top: 20px;
+  margin-top: 12px;
   flex: 1;
   overflow-y: auto;
 }
@@ -464,9 +488,9 @@ onMounted(() => {
 }
 
 .history-item {
-  padding: 10px 12px;
+  padding: 9px 10px;
   border-radius: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   cursor: pointer;
   color: #333;
   font-size: 14px;
@@ -512,8 +536,8 @@ onMounted(() => {
 
 /* 顶部 */
 .chat-header {
-  height: 60px;
-  padding: 0 20px;
+  height: 44px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   border-bottom: 1px solid #f0f0f0;
@@ -521,7 +545,7 @@ onMounted(() => {
 
 .toggle-btn {
   cursor: pointer;
-  padding: 8px;
+  padding: 6px;
   border: none;
   background: transparent;
   color: #666;
@@ -537,37 +561,40 @@ onMounted(() => {
 }
 
 .header-title {
-  margin-left: 12px;
+  margin-left: 10px;
   font-weight: 500;
   color: #333;
+  font-size: 15px;
 }
 
 /* 消息区 */
 .messages {
   flex: 1;
-  padding: 24px;
+  padding: 14px 24px;
   overflow-y: auto;
   scroll-behavior: smooth;
+  min-height: 0;
 }
 
 /* 输入区 */
 .input-area {
-  padding: 20px 24px;
+  padding: 10px 24px 12px;
   background: #fff;
+  flex-shrink: 0;
 }
 
 .input-wrapper {
   display: flex;
   align-items: center;
   background: #f4f4f4;
-  border-radius: 24px;
-  padding: 8px 8px 8px 20px;
+  border-radius: 22px;
+  padding: 6px 6px 6px 18px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 
 .input-wrapper input {
   flex: 1;
-  height: 40px;
+  height: 36px;
   border: none;
   background: transparent;
   outline: none;
@@ -575,13 +602,13 @@ onMounted(() => {
 }
 
 .send-btn {
-  margin-left: 10px;
-  width: 80px;
-  height: 40px;
+  margin-left: 8px;
+  width: 74px;
+  height: 36px;
   background: #1890ff;
   color: white;
   border: none;
-  border-radius: 20px;
+  border-radius: 18px;
   cursor: pointer;
   font-weight: 500;
   transition: background 0.2s;

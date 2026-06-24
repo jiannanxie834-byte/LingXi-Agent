@@ -20,9 +20,53 @@
              管理控制台
           </el-button>
 
-        <el-dropdown v-else @command="handleCommand" trigger="click">
+        <el-popover
+          v-if="userStore.role !== 'admin'"
+          placement="bottom-end"
+          trigger="click"
+          width="380"
+          popper-class="message-popover"
+          @show="fetchMessages"
+        >
+          <template #reference>
+            <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
+              <el-button class="message-button" circle>
+                <el-icon><Bell /></el-icon>
+              </el-button>
+            </el-badge>
+          </template>
+          <div class="message-panel">
+            <div class="message-panel-head">
+              <strong>系统消息</strong>
+              <el-button link type="primary" :disabled="unreadCount === 0" @click="markAllMessagesRead">
+                全部已读
+              </el-button>
+            </div>
+            <div v-if="messageLoading" class="message-empty">正在读取消息...</div>
+            <div v-else-if="messages.length === 0" class="message-empty">暂无系统消息</div>
+            <div v-else class="message-list">
+              <button
+                v-for="item in messages"
+                :key="item.id"
+                type="button"
+                class="message-item"
+                :class="{ unread: item.status === '未读' }"
+                @click="markMessageRead(item)"
+              >
+                <span class="message-dot"></span>
+                <span class="message-body">
+                  <span class="message-title">{{ item.title }}</span>
+                  <span class="message-content">{{ item.content }}</span>
+                  <span class="message-time">{{ item.created_at || '暂无时间' }}</span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </el-popover>
+
+        <el-dropdown v-if="userStore.role !== 'admin'" @command="handleCommand" trigger="click">
           <div class="user-profile">
-            <el-avatar :size="36" :src="userStore.avatar" class="avatar-box">
+            <el-avatar :size="32" :src="userStore.avatar" class="avatar-box">
               {{ displayName ? displayName.charAt(0).toUpperCase() : 'U' }}
             </el-avatar>
             <span class="username">{{ displayName }}</span>
@@ -53,10 +97,17 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Bell } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user' // 🌟 引入 Pinia
+import {
+  getSystemMessagesAPI,
+  getUnreadMessageCountAPI,
+  markAllMessagesReadAPI,
+  markMessageReadAPI
+} from '@/api/message'
 
 const router = useRouter()
 const route = useRoute()
@@ -64,8 +115,86 @@ const userStore = useUserStore() // 🌟 实例化 Pinia Store
 
 const currentPath = computed(() => route.path)
 const displayName = computed(() => userStore.nickname || userStore.username || '用户')
+const messages = ref([])
+const messageLoading = ref(false)
+const unreadCount = ref(0)
+const unreadPoller = ref(null)
 const goPage = (path) => router.push(path)
 const goToLogin = () => router.push('/login')
+
+const canLoadMessages = computed(() => {
+  return userStore.isLoggedIn && userStore.role !== 'admin' && Boolean(userStore.username)
+})
+
+const fetchUnreadCount = async () => {
+  if (!canLoadMessages.value) {
+    unreadCount.value = 0
+    return
+  }
+  try {
+    const res = await getUnreadMessageCountAPI(userStore.username)
+    if (res && res.code === 200) {
+      unreadCount.value = Number(res.data?.count || 0)
+    }
+  } catch (error) {
+    console.error('读取未读消息数失败:', error)
+  }
+}
+
+const fetchMessages = async () => {
+  if (!canLoadMessages.value) return
+  messageLoading.value = true
+  try {
+    const res = await getSystemMessagesAPI(userStore.username)
+    if (res && res.code === 200) {
+      messages.value = res.data || []
+      unreadCount.value = messages.value.filter(item => item.status === '未读').length
+    }
+  } catch (error) {
+    console.error('读取系统消息失败:', error)
+  } finally {
+    messageLoading.value = false
+  }
+}
+
+const markMessageRead = async (item) => {
+  if (!item || item.status === '已读') return
+  try {
+    const res = await markMessageReadAPI(userStore.username, item.id)
+    if (res && res.code === 200) {
+      item.status = '已读'
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    }
+  } catch (error) {
+    console.error('标记消息已读失败:', error)
+  }
+}
+
+const markAllMessagesRead = async () => {
+  if (!canLoadMessages.value) return
+  try {
+    const res = await markAllMessagesReadAPI(userStore.username)
+    if (res && res.code === 200) {
+      messages.value = messages.value.map(item => ({ ...item, status: '已读' }))
+      unreadCount.value = 0
+    }
+  } catch (error) {
+    console.error('全部标记已读失败:', error)
+  }
+}
+
+const stopUnreadPolling = () => {
+  if (unreadPoller.value) {
+    window.clearInterval(unreadPoller.value)
+    unreadPoller.value = null
+  }
+}
+
+const startUnreadPolling = () => {
+  stopUnreadPolling()
+  if (!canLoadMessages.value) return
+  unreadPoller.value = window.setInterval(fetchUnreadCount, 20000)
+}
 
 const handleCommand = (command) => {
   if (command === 'goProfile') {
@@ -76,6 +205,23 @@ const handleCommand = (command) => {
     router.push('/') 
   }
 }
+
+watch(
+  [() => userStore.isLoggedIn, () => userStore.username, () => userStore.role],
+  () => {
+    fetchUnreadCount()
+    startUnreadPolling()
+  }
+)
+
+onMounted(() => {
+  fetchUnreadCount()
+  startUnreadPolling()
+})
+
+onBeforeUnmount(() => {
+  stopUnreadPolling()
+})
 </script>
 
 <style scoped>
@@ -85,31 +231,114 @@ const handleCommand = (command) => {
   flex-direction: column; 
 }
 .header { 
-  height: 60px; 
+  height: 48px; 
   border-bottom: 1px solid #eee; 
   display: flex; 
   justify-content: space-between; 
   align-items: center; 
-  padding: 0 24px; 
+  padding: 0 20px; 
   background-color: #fff; 
+  flex-shrink: 0;
 }
 .logo { 
-  font-size: 18px; 
+  font-size: 17px; 
   font-weight: bold; 
   color: #333; 
 }
 .user-profile { 
   display: flex; 
   align-items: center; 
-  gap: 10px; 
+  gap: 8px; 
   cursor: pointer; 
-  padding: 4px 12px; 
-  border-radius: 20px; 
+  padding: 3px 10px; 
+  border-radius: 18px; 
   transition: background 0.2s; 
   user-select: none; 
 }
 .user-profile:hover { 
   background-color: #f5f5f5; 
+}
+.message-button {
+  width: 32px;
+  height: 32px;
+}
+.message-panel {
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+}
+.message-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #1f2937;
+}
+.message-empty {
+  padding: 24px 0;
+  color: #8c8c8c;
+  text-align: center;
+  font-size: 13px;
+}
+.message-list {
+  max-height: 340px;
+  overflow-y: auto;
+}
+.message-item {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 9px;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid #f5f5f5;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.message-item:last-child {
+  border-bottom: 0;
+}
+.message-item:hover .message-title {
+  color: #1677ff;
+}
+.message-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+.message-item.unread .message-dot {
+  background: #1677ff;
+}
+.message-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.message-title {
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.message-content {
+  display: -webkit-box;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-line;
+  word-break: break-word;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.message-time {
+  color: #9ca3af;
+  font-size: 11px;
 }
 .username { 
   font-size: 14px; 
@@ -123,12 +352,14 @@ const handleCommand = (command) => {
 .content { 
   flex: 1; 
   overflow: auto; 
+  min-height: 0;
 }
 .tabbar { 
-  height: 60px; 
+  height: 48px; 
   border-top: 1px solid #eee; 
   display: flex; 
   background: #fff; 
+  flex-shrink: 0;
 }
 .tabbar div { 
   flex: 1; 
@@ -136,7 +367,7 @@ const handleCommand = (command) => {
   justify-content: center; 
   align-items: center; 
   cursor: pointer; 
-  font-size: 15px; 
+  font-size: 14px; 
   color: #666; 
   transition: all 0.2s; 
 }
