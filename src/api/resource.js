@@ -1,6 +1,7 @@
 import request from '@/utils/request'
 
 export const getPassedResourcesAPI = () => request({ url: '/resource/list/passed', method: 'get' })
+export const getPassedResourceBundlesAPI = () => request({ url: '/resource/bundles/passed', method: 'get' })
 export const getRecommendedResourcesAPI = (username, limit = 12) => request({
   url: '/resource/recommendations',
   method: 'get',

@@ -38,6 +38,9 @@
               <div v-if="scope.row.review_comment" class="review-comment-line">
                 审核意见：{{ scope.row.review_comment }}
               </div>
+              <div v-if="isDeprecatedStandaloneType(scope.row.type)" class="deprecated-resource-line">
+                已停用为独立资源类型，建议改由主题学习包聚合展示
+              </div>
               <div v-if="scope.row.safety_review && scope.row.safety_review.risk_level" class="review-chip-line">
                 <span class="review-chip" :class="riskClass(scope.row.safety_review.risk_level)">
                   内容自检 {{ scope.row.safety_review.risk_level }} · {{ scope.row.safety_review.score }}分
@@ -178,6 +181,9 @@
           <span>{{ selectedResource.time || '暂无时间' }}</span>
         </div>
         <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
+        <div v-if="isDeprecatedStandaloneType(selectedResource.type)" class="deprecated-resource-panel">
+          “多模态学习包”已调整为主题资源包聚合视图，不再作为独立资源正文生成。历史资源可保留查阅，待审核资源建议下架或改成具体资源类型。
+        </div>
         <div v-if="selectedResource.review_comment" class="detail-review-comment">
           <strong>管理员审核意见</strong>
           <p>{{ selectedResource.review_comment }}</p>
@@ -340,6 +346,8 @@ const statusTagType = (status) => {
   if (status === '未通过') return 'danger'
   return 'warning'
 }
+
+const isDeprecatedStandaloneType = (type) => type === '多模态学习包'
 
 const askReviewComment = async ({ title, message, defaultValue = '' }) => {
   try {
@@ -672,6 +680,21 @@ onMounted(async () => {
 }
 .type-review-comment {
   color: #b45309;
+}
+.deprecated-resource-line {
+  margin-top: 6px;
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.deprecated-resource-panel {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  line-height: 1.7;
 }
 .resource-detail h3 { margin: 0 0 12px; color: #1f2937; }
 .detail-meta { display: flex; align-items: center; gap: 10px; color: #6b7280; margin-bottom: 14px; }

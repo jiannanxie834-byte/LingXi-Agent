@@ -43,16 +43,24 @@
 
     <div v-else class="resource-grid">
       
-      <div v-for="item in filteredResources" :key="item.id" class="resource-card">
+      <div v-for="item in filteredResources" :key="item.id" class="resource-card" :class="{ 'bundle-card': item.auto_bundle }">
         <div class="card-cover" :class="getCoverClass(item.type)">
           <span class="tag">{{ item.type }}</span>
         </div>
         <div class="card-info">
           <h3 :title="item.title">{{ item.title }}</h3>
-          <p class="desc">资源编码: {{ item.id }} · 状态: 正常开放</p>
+          <p class="desc" v-if="item.auto_bundle">
+            {{ item.resource_count || 0 }} 份资源 · {{ item.summary || '主题资源聚合视图' }}
+          </p>
+          <p class="desc" v-else>资源编码: {{ item.id }} · 状态: 正常开放</p>
+          <div v-if="item.auto_bundle" class="bundle-type-row">
+            <span v-for="child in (item.items || []).slice(0, 4)" :key="`${item.id}-${child.type}`">
+              {{ child.type }}
+            </span>
+          </div>
           <div class="action-bar">
             <button class="view-btn" @click="handleView(item)">
-              查阅资源
+              {{ item.auto_bundle ? '查看学习包' : '查阅资源' }}
             </button>
           </div>
         </div>
@@ -71,7 +79,6 @@
             <el-option label="知识点思维导图" value="知识点思维导图" />
             <el-option label="不同类型练习题目" value="不同类型练习题目" />
             <el-option label="拓展阅读材料" value="拓展阅读材料" />
-            <el-option label="多模态学习包" value="多模态学习包" />
             <el-option label="错题诊断与学习反馈报告" value="错题诊断与学习反馈报告" />
             <el-option label="学科实践应用任务" value="学科实践应用任务" />
           </el-select>
@@ -128,7 +135,29 @@
     </el-dialog>
 
     <el-dialog v-model="detailVisible" title="学习资源详情" width="760px" destroy-on-close>
-      <div v-if="selectedResource" class="resource-detail">
+      <div v-if="selectedResource && selectedResource.auto_bundle" class="resource-detail">
+        <h3>{{ selectedResource.title }}</h3>
+        <div class="detail-meta">
+          <el-tag>主题学习包</el-tag>
+          <span>{{ selectedResource.topic }}</span>
+          <span>{{ selectedResource.resource_count || 0 }} 份资源</span>
+        </div>
+        <p class="summary">{{ selectedResource.summary }}</p>
+        <div class="bundle-detail-list">
+          <button
+            v-for="child in selectedResource.items || []"
+            :key="child.id"
+            type="button"
+            class="bundle-detail-item"
+            @click="handleView(child)"
+          >
+            <span>{{ child.type }}</span>
+            <strong>{{ child.title }}</strong>
+            <em>{{ child.summary || '暂无摘要' }}</em>
+          </button>
+        </div>
+      </div>
+      <div v-else-if="selectedResource" class="resource-detail">
         <h3>{{ selectedResource.title }}</h3>
         <div class="detail-meta">
           <el-tag>{{ selectedResource.type }}</el-tag>
@@ -143,7 +172,7 @@
         <MarkdownRenderer :content="selectedResource.content || '暂无正文内容'" />
       </div>
       <template #footer>
-        <el-button v-if="selectedResource && !selectedResource.auto_pushed" @click="downloadPptx(selectedResource)">导出PPT</el-button>
+        <el-button v-if="selectedResource && !selectedResource.auto_pushed && !selectedResource.auto_bundle" @click="downloadPptx(selectedResource)">导出PPT</el-button>
         <el-button type="primary" @click="detailVisible = false">我知道了</el-button>
       </template>
     </el-dialog>
@@ -157,6 +186,7 @@ import { ElMessage } from 'element-plus'
 import {
   getPassedTypesAPI,
   getPassedResourcesAPI,
+  getPassedResourceBundlesAPI,
   getRecommendedResourcesAPI,
   proposeTypeAPI,
   uploadResourceAPI
@@ -168,6 +198,7 @@ const loading = ref(false)
 const userStore = useUserStore()
 const rawResources = ref([]) // 从后端拿到的全量“已通过”资源
 const recommendedResources = ref([])
+const resourceBundles = ref([])
 const recommendLoadFailed = ref(false)
 const searchKeyword = ref('')
 const typeApplyVisible = ref(false)
@@ -186,13 +217,23 @@ const fetchTypesAndResources = async () => {
     // 1. 从后端拿已经通过审核的动态分类
     const typeRes = await getPassedTypesAPI()
     if (typeRes && typeRes.code === 200) {
-      tabs.value = ['为你推荐', '全部', ...typeRes.data] // 把后端给的 6 种以上类型动态拼到全部后面
+      tabs.value = Array.from(new Set([
+        '为你推荐',
+        '主题学习包',
+        '全部',
+        ...(typeRes.data || []).filter(item => item !== '多模态学习包')
+      ]))
     }
     
     // 2. 拿通过的资源数据和个性化推荐数据，两类结果分别展示。
     const res = await getPassedResourcesAPI()
     if (res && res.code === 200) {
       rawResources.value = res.data || []
+    }
+
+    const bundleRes = await getPassedResourceBundlesAPI()
+    if (bundleRes && bundleRes.code === 200) {
+      resourceBundles.value = bundleRes.data || []
     }
 
     const recommendRes = await getRecommendedResourcesAPI(userStore.username || 'student', 12)
@@ -254,8 +295,10 @@ onMounted(() => {
 })
 
 const isRecommendTab = computed(() => currentTab.value === '为你推荐')
+const isBundleTab = computed(() => currentTab.value === '主题学习包')
 
 const sourceResources = computed(() => {
+  if (isBundleTab.value) return resourceBundles.value
   if (!isRecommendTab.value) return rawResources.value
   return recommendedResources.value
 })
@@ -276,7 +319,7 @@ const filteredResources = computed(() => {
     '知识点思维导图': ['知识点思维导图', '思维导图', '导图'],
     '不同类型练习题目': ['不同类型练习题目', '练习题目', '练习题', '题库', '试卷'],
     '拓展阅读材料': ['拓展阅读材料', '拓展阅读', '阅读材料'],
-    '多模态学习包': ['多模态学习包', '多模态课件脚本', '课件脚本', 'PPT', '图解', '分镜', '流程图', '代码注释', '题解'],
+    '主题学习包': ['主题学习包', '资源包', '学习包'],
     '错题诊断与学习反馈报告': ['错题诊断与学习反馈报告', '错题诊断', '学习反馈', '诊断报告', '反馈报告'],
     '学科实践应用任务': ['学科实践应用任务', '实践应用', '应用任务', '实践任务', '项目案例', '实验探究', '材料分析', '写作任务', '代码类实操案例', '实操案例', '代码案例']
   }
@@ -285,7 +328,7 @@ const filteredResources = computed(() => {
 
   return sourceResources.value.filter(item => {
     const itemType = item.type || ''
-    const typeMatched = isRecommendTab.value || currentTab.value === '全部'
+    const typeMatched = isRecommendTab.value || isBundleTab.value || currentTab.value === '全部'
       ? true
       : matchTypes.some(type => itemType.includes(type) || type.includes(itemType))
 
@@ -299,7 +342,9 @@ const filteredResources = computed(() => {
       item.summary,
       item.source,
       item.uploader,
-      item.content
+      item.content,
+      item.topic,
+      ...(item.items || []).flatMap(child => [child.title, child.type, child.summary])
     ].join('\n').toLowerCase()
 
     return searchableText.includes(keyword)
@@ -312,9 +357,9 @@ const handleTabClick = (tab) => {
 
 //  3. 根据不同的资源类型，动态赋予你之前写好的高级渐变色封面样式
 const getCoverClass = (type) => {
+  if (type.includes('主题学习包') || type.includes('学习包')) return 'bundle-cover'
   if (type.includes('导图')) return 'mindmap-cover'
   if (type.includes('文档')) return 'doc-cover'
-  if (type.includes('多模态') || type.includes('课件')) return 'media-cover'
   if (type.includes('诊断') || type.includes('反馈')) return 'feedback-cover'
   if (type.includes('实践') || type.includes('应用')) return 'practice-cover'
   return 'generic-cover'
@@ -353,7 +398,9 @@ const submitUpload = async () => {
 
 // 点击查看按钮
 const handleView = (item) => {
-  selectedResource.value = item
+  selectedResource.value = item.auto_bundle
+    ? item
+    : rawResources.value.find(resource => resource.id === item.id) || recommendedResources.value.find(resource => resource.id === item.id) || item
   detailVisible.value = true
 }
 
@@ -464,6 +511,9 @@ const downloadPptx = (item) => {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0,0,0,0.1);
 }
+.bundle-card {
+  border: 1px solid #dbeafe;
+}
 
 /* 卡片封面 */
 .card-cover {
@@ -479,7 +529,7 @@ const downloadPptx = (item) => {
 .doc-cover { background: linear-gradient(135deg, #ffd194 0%, #70e1f5 100%); }
 .feedback-cover { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); }
 .practice-cover { background: linear-gradient(135deg, #fddb92 0%, #d1fdff 100%); }
-.media-cover { background: linear-gradient(135deg, #89f7fe 0%, #f6d365 100%); }
+.bundle-cover { background: linear-gradient(135deg, #bfdbfe 0%, #bbf7d0 100%); }
 .generic-cover { background: linear-gradient(135deg, #dbeafe 0%, #e5e7eb 100%); }
 
 .tag {
@@ -507,6 +557,19 @@ const downloadPptx = (item) => {
   margin: 0 0 16px 0;
   font-size: 13px;
   color: #999;
+}
+.bundle-type-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.bundle-type-row span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
 }
 
 .action-bar {
@@ -545,6 +608,47 @@ const downloadPptx = (item) => {
 .safety-note em {
   color: #4b5563;
   font-style: normal;
+}
+.bundle-detail-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.bundle-detail-item {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 6px 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  text-align: left;
+  cursor: pointer;
+}
+.bundle-detail-item:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+.bundle-detail-item span {
+  grid-row: span 2;
+  align-self: start;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+.bundle-detail-item strong {
+  min-width: 0;
+  font-size: 14px;
+}
+.bundle-detail-item em {
+  color: #6b7280;
+  font-size: 12px;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {
