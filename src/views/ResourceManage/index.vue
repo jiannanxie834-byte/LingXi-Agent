@@ -3,6 +3,35 @@
     
     <div ref="resourceSectionRef" class="section-box">
       <h2> 初始课程知识资源审核</h2>
+      <div class="quick-review-panel">
+        <div>
+          <strong>演示快速审核</strong>
+          <p>按学生账号通过最近待审核资源，保留教师审核动作，便于演示资源进入学生资源库。</p>
+        </div>
+        <div class="quick-review-actions">
+          <el-input
+            v-model="quickReviewUsername"
+            placeholder="学生账号，如 student"
+            clearable
+            style="width: 220px;"
+            @keyup.enter="handleApproveLatestResources"
+          />
+          <el-input-number
+            v-model="quickReviewLimit"
+            :min="1"
+            :max="20"
+            controls-position="right"
+            style="width: 112px;"
+          />
+          <el-button
+            type="primary"
+            :loading="quickReviewLoading"
+            @click="handleApproveLatestResources"
+          >
+            通过最近待审核资源
+          </el-button>
+        </div>
+      </div>
       <el-tabs v-model="activeResourceStatus" class="resource-status-tabs">
         <el-tab-pane
           v-for="tab in resourceStatusTabs"
@@ -257,6 +286,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getAllResourcesAPI,
   approveResourceAPI,
+  approveLatestResourcesAPI,
   rejectResourceAPI,
   reopenResourceAPI,
   updateResourceCommentAPI,
@@ -278,6 +308,9 @@ const detailVisible = ref(false)
 const selectedResource = ref(null)
 const resourceSectionRef = ref(null)
 const typeSectionRef = ref(null)
+const quickReviewUsername = ref('student')
+const quickReviewLimit = ref(10)
+const quickReviewLoading = ref(false)
 
 const resourceStatusMap = {
   pending: { label: '未处理', status: '待审核' },
@@ -406,6 +439,35 @@ const applyRouteFocus = () => {
   if (section === 'resources') {
     activeResourceStatus.value = status
     scrollToSection('resources')
+  }
+}
+
+const handleApproveLatestResources = async () => {
+  const username = quickReviewUsername.value.trim()
+  if (!username) {
+    ElMessage.warning('请填写学生账号')
+    return
+  }
+
+  quickReviewLoading.value = true
+  try {
+    const res = await approveLatestResourcesAPI({
+      username,
+      limit: quickReviewLimit.value || 10
+    })
+    if (res && res.code === 200) {
+      const count = res.data?.count ?? 0
+      ElMessage.success(`已通过该学生最近生成的 ${count} 份资源`)
+      await loadAllReviewData()
+      activeResourceStatus.value = count > 0 ? 'approved' : activeResourceStatus.value
+    } else {
+      ElMessage.error(res?.message || '快速审核失败')
+    }
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('快速审核失败')
+  } finally {
+    quickReviewLoading.value = false
   }
 }
 
@@ -545,6 +607,36 @@ onMounted(async () => {
 
 <style scoped>
 .admin-review-page { padding: 24px; background: #fff; border-radius: 8px; }
+.quick-review-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+.quick-review-panel strong {
+  display: block;
+  color: #1f2937;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.quick-review-panel p {
+  margin: 2px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.quick-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .resource-table,
 .type-review-table {
   width: 100%;

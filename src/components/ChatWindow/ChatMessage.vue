@@ -33,9 +33,11 @@
             </div>
             <p>{{ card.summary }}</p>
             <div v-if="card.items && card.items.length" class="card-items">
-              <span v-for="item in card.items" :key="`${item.type}-${item.title}`">
-                {{ item.title }}
-              </span>
+              <div v-for="item in card.items" :key="`${item.type}-${item.title}`" class="card-item">
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.type }} · {{ item.status || '待审核' }}</span>
+                <em v-if="item.summary">{{ item.summary }}</em>
+              </div>
             </div>
             <em v-if="card.actionText">{{ card.actionText }}</em>
           </button>
@@ -106,7 +108,7 @@ const statusText = computed(() => {
   if (props.message.isPending) return '正在整理学习建议'
   if (!canShowLearningStatus.value) return ''
   if ((props.message.cards || []).some(card => card.type === 'resource_review')) {
-    return '学习建议已生成，配套资料正在整理'
+    return '学习建议已生成，配套资源正在教师审核'
   }
   return props.message.content ? '学习建议已生成' : ''
 })
@@ -138,10 +140,10 @@ const productCards = computed(() => {
     if (card.type === 'resource_review') {
       result.push({
         id: `resource-pending-${index}-${card.title}`,
-        title: '配套资料整理中',
-        badge: statusLabel(card.status || 'pending'),
-        summary: card.summary || '配套资料正在整理，完成后会进入资源库。',
-        actionText: card.action_text || '查看资源库',
+        title: card.title || '配套资源正在教师审核',
+        badge: statusLabel(card.status || 'pending_review'),
+        summary: card.summary || '配套资源已生成，正在进行教师审核。审核通过后会进入资源库。',
+        actionText: card.action_text || '审核通过后查看资源库',
         actionRoute: card.action_route || '/resource',
         items: (card.items || []).slice(0, 4)
       })
@@ -149,8 +151,8 @@ const productCards = computed(() => {
         id: `resource-review-${index}-${card.title}`,
         title: '审核通过后进入资源库',
         badge: '待发布',
-        summary: '资料通过审核后会自动出现在资源库，你可以在资源页继续学习和收藏。',
-        actionText: card.action_text || '查看资源库',
+        summary: '当前只展示标题、类型和摘要。完整正文会在教师审核通过后开放。',
+        actionText: card.action_text || '审核通过后查看资源库',
         actionRoute: card.action_route || '/resource',
         items: []
       })
@@ -325,24 +327,45 @@ const handleCardClick = (card) => {
 }
 
 .card-items {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 6px;
   margin-top: 8px;
 }
 
-.card-items span {
-  max-width: 100%;
-  padding: 2px 6px;
-  border-radius: 4px;
+.card-item {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
   background: #fff;
   border: 1px solid #e5e7eb;
-  color: #4b5563;
-  font-size: 11px;
-  line-height: 1.45;
+}
+
+.card-item strong {
+  color: #1f2937;
+  font-size: 12px;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.card-item span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.result-card .card-item em {
+  margin-top: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .result-card em {

@@ -87,7 +87,7 @@
           <el-input v-model="uploadForm.summary" placeholder="简要说明这份资源适合解决什么学习问题" />
         </el-form-item>
         <el-form-item label="知识来源">
-          <el-input v-model="uploadForm.source" placeholder="如：人工智能导论第3章 / 官方文档 / 课堂讲义" />
+          <el-input v-model="uploadForm.source" placeholder="如：人工智能第3章 / 官方文档 / 课堂讲义" />
         </el-form-item>
         <el-form-item label="资源正文">
           <el-input

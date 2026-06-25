@@ -11,6 +11,7 @@ export const getAllStudentsAPI = () => request({ url: '/admin/students/list', me
 // 资源审核
 export const getAllResourcesAPI = () => request({ url: '/admin/resources/all', method: 'get' })
 export const approveResourceAPI = (id, comment = '') => request({ url: '/admin/resources/approve', method: 'post', data: { id, comment } })
+export const approveLatestResourcesAPI = (data) => request({ url: '/admin/resources/approve-latest', method: 'post', data })
 export const rejectResourceAPI = (id, comment = '') => request({ url: '/admin/resources/reject', method: 'post', data: { id, comment } })
 export const reopenResourceAPI = (id, comment = '') => request({ url: '/admin/resources/reopen', method: 'post', data: { id, comment } })
 export const updateResourceCommentAPI = (id, comment = '') => request({ url: '/admin/resources/comment', method: 'post', data: { id, comment } })
