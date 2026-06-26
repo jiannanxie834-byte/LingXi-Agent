@@ -216,7 +216,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 //  引入接口：只拿通过审核的资源，以及前台上传接口
 import {
@@ -240,6 +241,7 @@ import { useUserStore } from '@/stores/user'
 
 const loading = ref(false)
 const userStore = useUserStore()
+const route = useRoute()
 const rawResources = ref([]) // 从后端拿到的全量“已通过”资源
 const recommendedResources = ref([])
 const resourceBundles = ref([])
@@ -277,6 +279,8 @@ const normalizeArtifactResource = (resource = {}, artifact = {}) => {
     id: resource.id || artifact.resource_id || artifact.artifact_id,
     resource_id: artifact.resource_id || resource.id || '',
     artifact_id: artifact.artifact_id || resource.artifact_id || '',
+    unit_id: artifact.unit_id || resource.unit_id || (artifact.unit_ids || resource.unit_ids || [])[0] || '',
+    unit_ids: artifact.unit_ids || resource.unit_ids || [],
     title: artifact.title || resource.title || '未命名 Artifact',
     type: artifact.type || resource.type || '学习资源',
     summary: artifact.summary || resource.summary || '',
@@ -396,8 +400,9 @@ const submitNewTypeApplication = async () => {
   }
 }
 
-onMounted(() => {
-  fetchTypesAndResources()
+onMounted(async () => {
+  await fetchTypesAndResources()
+  await applyRouteQuery()
 })
 
 const isRecommendTab = computed(() => currentTab.value === '为你推荐')
@@ -446,7 +451,6 @@ const filteredResources = computed(() => {
       : matchTypes.some(type => itemType.includes(type) || type.includes(itemType))
 
     if (!typeMatched) return false
-    if (!keyword) return true
 
     const searchableText = [
       item.id,
@@ -457,16 +461,54 @@ const filteredResources = computed(() => {
       item.uploader,
       item.content,
       item.topic,
+      item.unit_id,
+      ...(item.unit_ids || []),
       ...(item.items || []).flatMap(child => [child.title, child.type, child.summary])
     ].join('\n').toLowerCase()
 
-    return searchableText.includes(keyword)
+    const keywordMatched = !keyword || searchableText.includes(keyword)
+    const queryUnitId = String(route.query.unit_id || '').toLowerCase()
+    const queryType = String(route.query.type || '').toLowerCase()
+    const queryArtifactId = String(route.query.artifact_id || '').toLowerCase()
+    const itemTypeText = String(item.type || '').toLowerCase()
+    const itemId = String(item.artifact_id || item.id || '').toLowerCase()
+    const queryMatched = (
+      (!queryUnitId || searchableText.includes(queryUnitId)) &&
+      (!queryType || itemTypeText.includes(queryType) || queryType.includes(itemTypeText)) &&
+      (!queryArtifactId || itemId === queryArtifactId)
+    )
+
+    return keywordMatched && queryMatched
   })
 })
 
 const handleTabClick = (tab) => {
   currentTab.value = tab
 }
+
+const applyRouteQuery = async () => {
+  const type = String(route.query.type || '')
+  const unitId = String(route.query.unit_id || '')
+  const artifactId = String(route.query.artifact_id || '')
+  if (type) {
+    const matchedTab = tabs.value.find(tab => tab === type || type.includes(tab) || tab.includes(type))
+    currentTab.value = matchedTab || '全部'
+  } else if (unitId || artifactId) {
+    currentTab.value = '全部'
+  }
+  if (artifactId) {
+    await nextTick()
+    const item = [...rawResources.value, ...recommendedResources.value]
+      .find(resource => String(resource.artifact_id || resource.id || '') === artifactId)
+    if (item) handleView(item)
+  }
+}
+
+watch(
+  () => route.query,
+  () => applyRouteQuery(),
+  { deep: true }
+)
 
 //  3. 根据不同的资源类型，动态赋予你之前写好的高级渐变色封面样式
 const getCoverClass = (type) => {

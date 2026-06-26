@@ -6,8 +6,8 @@
         <p class="sub-title">基于课程图谱与多智能体生成 ｜ 支持 CNN、反向传播、Transformer、PyTorch 项目动态调整</p>
       </div>
       <div class="header-actions">
-        <button class="btn btn-secondary" @click="createNewPlan">+ 新增独立规划路线</button>
-        <button class="btn btn-primary" @click="addGlobalTask">+ 添加独立自定义任务</button>
+        <button class="btn btn-secondary" @click="createNewPlan">+ 新增自主规划路线</button>
+        <button class="btn btn-primary" @click="addGlobalTask">+ 添加自主任务</button>
       </div>
     </div>
 
@@ -28,7 +28,8 @@
               <h3>{{ plan.title }}</h3>
             </div>
             <div class="header-right" @click.stop>
-              <button class="inline-add-btn" @click="insertTask(pIndex, 0)">+ 在最前插入任务</button>
+              <button class="inline-edit-route-btn" @click.stop="openRouteEditor(pIndex)">重构路线</button>
+              <button class="inline-add-btn" @click="insertTask(pIndex, 0)">+ 插入首个任务</button>
             </div>
             <el-popconfirm 
                 title="确定要彻底销毁整条学习路线吗？此操作不可逆！" 
@@ -39,7 +40,7 @@
               >
                 <template #reference>
                   <el-button type="primary" plain size="small" style="margin-left: 10px;">
-                    删除
+                    删除路线
                   </el-button>
                 </template>
               </el-popconfirm>
@@ -79,12 +80,20 @@
                   <p class="step-desc">{{ step.desc }}</p>
                   
                   <div class="linked-resources" v-if="step.resources && step.resources.length">
-                    <div v-for="res in step.resources" :key="res" class="res-tag">🔗 {{ res }}</div>
+                    <button
+                      v-for="res in step.resources"
+                      :key="res.id"
+                      type="button"
+                      class="res-tag res-link"
+                      @click.stop="openStepResource(res, step)"
+                    >
+                      🔗 {{ res.title }}
+                    </button>
                   </div>
 
                   <div class="insert-trigger-zone">
                     <button class="insert-btn" @click="insertTask(pIndex, sIndex + 1)">
-                      + 在此处插入下一步任务
+                      + 插入下一步
                     </button>
                   </div>
                 </div>
@@ -112,7 +121,8 @@
 
         <div class="card tasks-card">
           <div class="tasks-card-header">
-            <h3>📌 独立待办清单</h3>
+            <h3>自主任务清单</h3>
+            <button class="mini-add-btn" @click="addGlobalTask">+ 新增</button>
           </div>
           <div class="task-list">
             <div class="task-item" v-for="(task, index) in myTasks" :key="task.id">
@@ -120,25 +130,37 @@
                 <input type="checkbox" v-model="task.done" @change="persistTodos" />
                 <span :class="{ 'done': task.done }">{{ task.content }}</span>
               </div>
-              <button class="delete-task-btn" @click="deleteGlobalTask(index)">✕</button>
+              <div class="task-actions">
+                <button class="edit-task-btn" @click="editGlobalTask(index)">编辑</button>
+                <button class="delete-task-btn" @click="deleteGlobalTask(index)">✕</button>
+              </div>
             </div>
-            <div class="empty-hint" v-if="myTasks.length === 0">暂无自定义待办</div>
+            <div class="empty-hint" v-if="myTasks.length === 0">暂无自主任务，可点击上方新增</div>
           </div>
         </div>
       </div>
     </div>
+
+    <RouteEditorDrawer
+      v-model="routeEditorVisible"
+      :plan="editingPlanDraft"
+      @save="saveRouteEditor"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 //  1. 精准导入 API 文件里真实暴露的名字
 import { getPlanListAPI, deleteRouteAPI, savePlanAPI } from '@/api/plan'
 import { getTodoListAPI, saveTodoAPI } from '@/api/todo'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import RouteEditorDrawer from '@/components/RouteEditorDrawer.vue'
 
 const userStore = useUserStore()
+const router = useRouter()
 const loading = ref(false)
 
 //  2. 核心状态：彻底清空写死的数据，等待后端投喂！
@@ -146,6 +168,9 @@ const plans = ref([])
 
 // 独立自定义任务数组 (属于本地功能，暂时保留)
 const myTasks = ref([])
+const routeEditorVisible = ref(false)
+const editingPlanIndex = ref(-1)
+const editingPlanDraft = ref(null)
 
 //  3. 初始化拉取：页面一加载就去轰鸣后端
 onMounted(() => {
@@ -159,7 +184,7 @@ const fetchPlansData = async () => {
   try {
     const res = await getPlanListAPI(userStore.username)
     if (res && res.code === 200) {
-      plans.value = res.data // 修复了变量名不一致的问题
+      plans.value = (res.data || []).map(normalizePlan)
     }
   } catch (error) {
     console.error('拉取路线失败:', error)
@@ -170,6 +195,7 @@ const fetchPlansData = async () => {
 
 const persistPlans = async (successMessage = '') => {
   try {
+    plans.value = plans.value.map(normalizePlan)
     const res = await savePlanAPI(userStore.username, plans.value)
     if (successMessage && res && res.code === 200) {
       ElMessage.success(successMessage)
@@ -179,12 +205,65 @@ const persistPlans = async (successMessage = '') => {
   }
 }
 
+const normalizeStepResources = (resources = [], step = {}) => {
+  return (resources || []).map((res, index) => {
+    if (typeof res === 'string') {
+      return {
+        id: `${step.id || 'step'}_res_${index}`,
+        title: res,
+        type: 'unknown',
+        unit_id: step.unit_id || '',
+        route: '',
+        query: {}
+      }
+    }
+    return {
+      id: res.id || res.resource_id || res.artifact_id || `${step.id || 'step'}_res_${index}`,
+      title: res.title || res.name || '学习资源',
+      type: res.type || 'resource',
+      unit_id: res.unit_id || step.unit_id || '',
+      route: res.route || '/resource',
+      query: res.query || {
+        artifact_id: res.artifact_id || res.id || '',
+        unit_id: res.unit_id || step.unit_id || '',
+        type: res.type || ''
+      }
+    }
+  })
+}
+
+const normalizePlan = (plan = {}) => {
+  const normalized = {
+    ...plan,
+    id: plan.id || `route_${Date.now()}`,
+    title: plan.title || '未命名学习路线',
+    desc: plan.desc || plan.description || '',
+    isCollapsed: Boolean(plan.isCollapsed),
+    isAiGenerated: plan.isAiGenerated !== false,
+    tasks: Array.isArray(plan.tasks) ? plan.tasks : []
+  }
+  normalized.tasks = normalized.tasks.map((task, index) => {
+    const step = {
+      ...task,
+      id: task.id || `node_${index + 1}`,
+      title: task.title || `第 ${index + 1} 步`,
+      desc: task.desc || task.objective || '',
+      status: task.status || (index === 0 ? 'active' : 'pending'),
+      isCustom: Boolean(task.isCustom),
+      unit_id: task.unit_id || ''
+    }
+    step.resources = normalizeStepResources(task.resources || [], step)
+    return step
+  })
+  return normalized
+}
+
 //  5. 删除整条路线
 const handleDeleteRoute = async (routeId) => {
   try {
     const res = await deleteRouteAPI(userStore.username, routeId)
     if (res && res.code === 200) {
-      ElMessage.success('整条学习路线已销毁！')
+      ElMessage.success('学习路线已删除')
       fetchPlansData() // 删完立刻重新拉取，刷新视图
     }
   } catch (error) {
@@ -237,13 +316,17 @@ const togglePlan = (index) => {
 // 【提醒】新增路线和插入任务目前是纯前端操作，刷新会丢失。
 // 等 AI 接口调通后，这部分也会变成真实 API 交互！
 const createNewPlan = async () => {
-  const title = await promptText('请输入新规划的名称', '新增独立规划路线', {
+  const title = await promptText('请输入新规划的名称', '新增自主规划路线', {
     placeholder: '如：监督学习复习路线'
   })
   if (!title) return
   plans.value.push({
-    id: Date.now(), title: title, isCollapsed: false, isAiGenerated: false,
-    tasks: [{ id: Date.now() + 1, title: '准备开始的第一步', desc: '点击下方在此处插入新任务。', status: 'pending', isCustom: true, resources: [] }]
+    id: `route_${Date.now()}`,
+    title,
+    desc: '学生自主创建的学习路线。',
+    isCollapsed: false,
+    isAiGenerated: false,
+    tasks: [{ id: `node_${Date.now() + 1}`, title: '准备开始的第一步', desc: '点击下方在此处插入新任务。', status: 'pending', isCustom: true, unit_id: '', resources: [] }]
   })
   persistPlans('新规划路线已保存')
 }
@@ -259,19 +342,42 @@ const insertTask = async (planIndex, targetStepIndex) => {
   }) || '学生自主补充的个性化学习任务。'
 
   const newTask = {
-    id: Date.now(), title: taskTitle, desc: taskDesc, status: 'pending', isCustom: true, resources: []
+    id: `node_${Date.now()}`, title: taskTitle, desc: taskDesc, status: 'pending', isCustom: true, unit_id: '', resources: []
   }
   plans.value[planIndex].tasks.splice(targetStepIndex, 0, newTask)
   persistPlans('新任务已插入路线')
 }
 
 const addGlobalTask = async () => {
-  const content = await promptText('请输入待办事项', '新增独立待办', {
+  const content = await promptText('请输入任务内容', '新增自主任务', {
     placeholder: '如：复习第4章模型评估'
   })
   if (!content) return
-  myTasks.value.push({ id: Date.now(), content: content, done: false })
+  myTasks.value.push({
+    id: Date.now(),
+    content,
+    done: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  })
   await persistTodos()
+  ElMessage.success('自主任务已新增')
+}
+
+const editGlobalTask = async (index) => {
+  const task = myTasks.value[index]
+  const nextContent = await promptText('修改任务内容', '编辑自主任务', {
+    value: task.content,
+    placeholder: '请输入新的任务内容'
+  })
+  if (!nextContent) return
+  myTasks.value[index] = {
+    ...task,
+    content: nextContent,
+    updated_at: new Date().toISOString()
+  }
+  await persistTodos()
+  ElMessage.success('自主任务已更新')
 }
 
 const deleteGlobalTask = async (index) => {
@@ -312,6 +418,39 @@ const persistTodos = async () => {
   } catch (error) {
     console.error('保存待办失败:', error)
   }
+}
+
+const openStepResource = (res, step) => {
+  if (!res?.route) {
+    ElMessage.info('该资源尚未绑定详情页')
+    return
+  }
+  router.push({
+    path: res.route,
+    query: {
+      ...(res.query || {}),
+      step_id: step.id,
+      unit_id: res.unit_id || step.unit_id || ''
+    }
+  })
+}
+
+const openRouteEditor = (planIndex) => {
+  editingPlanIndex.value = planIndex
+  editingPlanDraft.value = JSON.parse(JSON.stringify(normalizePlan(plans.value[planIndex])))
+  routeEditorVisible.value = true
+}
+
+const saveRouteEditor = async (draft) => {
+  if (editingPlanIndex.value < 0) return
+  plans.value[editingPlanIndex.value] = {
+    ...normalizePlan(draft),
+    updated_at: new Date().toISOString()
+  }
+  routeEditorVisible.value = false
+  editingPlanDraft.value = null
+  editingPlanIndex.value = -1
+  await persistPlans('路线已重构')
 }
 </script>
 
@@ -382,7 +521,8 @@ const persistTodos = async () => {
 .plan-group-header:hover { background: #fafafa; }
 .plan-group.is-collapsed .plan-group-header { border-bottom: none; }
 
-.header-left { display: flex; align-items: center; gap: 12px; }
+.header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .fold-icon { font-size: 12px; color: #999; transition: transform 0.3s; width: 14px; }
 
 .ai-tag {
@@ -400,6 +540,16 @@ const persistTodos = async () => {
   padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
 }
 .inline-add-btn:hover { background: #e6f7ff; }
+.inline-edit-route-btn {
+  background: #fff;
+  border: 1px solid #dbeafe;
+  color: #2563eb;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.inline-edit-route-btn:hover { background: #eff6ff; }
 
 /* 时间轴布局容器 */
 .timeline-container { padding: 24px 32px; background: #fcfcfc; }
@@ -440,8 +590,17 @@ const persistTodos = async () => {
 .delete-step-btn:hover { color: #f5222d; }
 
 .step-desc { font-size: 13px; color: #666; margin: 0 0 12px 0; line-height: 1.5; }
-.linked-resources { display: flex; flex-wrap: wrap; gap: 6px; }
+.linked-resources { display: flex; flex-wrap: wrap; gap: 8px; }
 .res-tag { font-size: 11px; background: #f5f5f5; border: 1px solid #d9d9d9; padding: 2px 8px; border-radius: 4px; color: #555; }
+.res-link {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #2563eb;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+.res-link:hover { background: #dbeafe; }
 
 /* 🌟 插针区域：隐藏在两个任务之间，鼠标悬浮时高亮显示 */
 .insert-trigger-zone {
@@ -464,16 +623,45 @@ const persistTodos = async () => {
 .percentage { fill: #333; font-size: 8px; text-anchor: middle; font-weight: bold; }
 .progress-info { text-align: center; font-size: 13px; color: #666; }
 
-/* 待办清单 */
-.tasks-card-header { margin-bottom: 16px; }
+/* 自主任务清单 */
+.tasks-card-header {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.tasks-card-header h3 { margin: 0; }
+.mini-add-btn {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #2563eb;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.mini-add-btn:hover { background: #dbeafe; }
 .task-list { display: flex; flex-direction: column; }
 .task-item {
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 0; border-bottom: 1px solid #f0f0f0; transition: background 0.2s;
 }
 .task-item:hover { background: #fafafa; }
-.task-left { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #333; }
+.task-left { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #333; min-width: 0; }
+.task-left span { word-break: break-word; }
 .task-left span.done { text-decoration: line-through; color: #bfbfbf; }
+.task-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.edit-task-btn {
+  border: none;
+  background: #f0f7ff;
+  color: #2563eb;
+  border-radius: 5px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.edit-task-btn:hover { background: #dbeafe; }
 
 .delete-task-btn {
   background: none; border: none; color: #ccc;
