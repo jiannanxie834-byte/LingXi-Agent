@@ -19,19 +19,26 @@
             :key="session.id"
             class="history-item"
             :class="{ active: activeSessionId === session.id }"
-            @click="loadSessionMessages(session)"
           >
-            <span class="history-title">{{ session.title || '新对话' }}</span>
-            <span class="history-time">{{ formatSessionTime(session.updated_at || session.created_at) }}</span>
+            <div class="history-main" @click="loadSessionMessages(session)">
+              <span class="history-title">{{ session.title || '新对话' }}</span>
+              <span class="history-time">{{ formatSessionTime(session.updated_at || session.created_at) }}</span>
+            </div>
+            <button
+              class="history-delete-btn"
+              title="删除对话"
+              :disabled="isSending"
+              @click.stop="deleteSession(session)"
+            >
+              ×
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <div class="chat-area">
-
-      <!-- 顶部 -->
-      <div class="chat-header">
+      <div class="chat-sidebar-toggle">
         <button class="toggle-btn" @click="toggleSidebar">
 
           <svg
@@ -61,18 +68,7 @@
             <polyline points="9 18 3 12 9 6"></polyline>
             <line x1="21" y1="6" x2="21" y2="18"></line>
           </svg>
-
         </button>
-
-        <span class="header-title">
-          当前对话：深度学习智能学习舱
-        </span>
-      </div>
-
-      <div class="learning-cockpit">
-        <CourseMapGraph :active-unit="activeUnitId" />
-        <AgentProgressTimeline :steps="latestProgress" />
-        <ProfileDimensionPanel :profile="profileSnapshot" />
       </div>
 
       <!-- 消息区域 -->
@@ -80,8 +76,9 @@
 
         <ChatMessage
           v-for="(msg, index) in messageList"
-          :key="index"
+          :key="msg.localId || msg.id || index"
           :message="msg"
+          @delete="deleteMessage"
         />
 
       </div>
@@ -115,14 +112,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, nextTick, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import ChatMessage from '@/components/ChatWindow/ChatMessage.vue'
-import AgentProgressTimeline from '@/components/AgentProgressTimeline.vue'
-import CourseMapGraph from '@/components/CourseMapGraph.vue'
-import ProfileDimensionPanel from '@/components/ProfileDimensionPanel.vue'
 import {
+  deleteChatMessageAPI,
+  deleteChatSessionAPI,
   getChatMessagesAPI,
   getChatSessionsAPI,
   normalizeStudentChatData,
@@ -153,23 +149,6 @@ const welcomeMessage = {
 }
 
 const messageList = ref([{ ...welcomeMessage }])
-
-const latestAssistantMessage = computed(() => {
-  return [...messageList.value].reverse().find(item => item.role === 'ai' && !item.isIntro) || {}
-})
-
-const latestProgress = computed(() => latestAssistantMessage.value.progress || [])
-
-const activeUnitId = computed(() => {
-  const cards = latestAssistantMessage.value.cards || []
-  return cards.find(card => card.unit_id)?.unit_id || ''
-})
-
-const profileSnapshot = computed(() => ({
-  dimensions: userStore.profileDimensions || {},
-  radar: userStore.profileRadar || {},
-  updated_at: userStore.profileUpdatedAt || ''
-}))
 
 const currentUsername = () => userStore.username || 'student'
 
@@ -267,6 +246,8 @@ const loadSessionMessages = async (session) => {
       const messages = (res.data || []).map(item => {
         const normalized = normalizeStudentChatData({ data: item })
         return {
+          id: item.id,
+          localId: item.id,
           role: item.role === 'user' ? 'user' : 'ai',
           content: item.role === 'user' ? item.content || '' : normalized.content,
           contentType: normalized.contentType,
@@ -283,6 +264,58 @@ const loadSessionMessages = async (session) => {
   } catch (error) {
     console.error('加载历史对话失败:', error)
     ElMessage.error('历史对话加载失败')
+  }
+}
+
+const deleteSession = async (session) => {
+  if (!session?.id || isSending.value) return
+  try {
+    await ElMessageBox.confirm(
+      '确定删除该对话及其全部消息吗？',
+      '删除对话',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    const res = await deleteChatSessionAPI(session.id, currentUsername())
+    if (res && res.code === 200) {
+      chatSessions.value = chatSessions.value.filter(item => item.id !== session.id)
+      if (activeSessionId.value === session.id) {
+        activeSessionId.value = ''
+        sessionStorage.removeItem(activeSessionStorageKey())
+        resetMessages()
+        await scrollToBottom()
+      }
+      ElMessage.success('对话已删除')
+    } else {
+      ElMessage.error(res?.message || '删除对话失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除对话失败:', error)
+    }
+  }
+}
+
+const deleteMessage = async (msg) => {
+  if (!msg || msg.isIntro || isSending.value) return
+  try {
+    if (msg.id) {
+      const res = await deleteChatMessageAPI(msg.id, currentUsername())
+      if (!res || res.code !== 200) {
+        return ElMessage.error(res?.message || '删除消息失败')
+      }
+    }
+    messageList.value = messageList.value.filter(item => item !== msg && item.id !== msg.id)
+    if (!messageList.value.length) {
+      resetMessages()
+    }
+    ElMessage.success('消息已删除')
+  } catch (error) {
+    console.error('删除消息失败:', error)
+    ElMessage.error('删除消息失败')
   }
 }
 
@@ -332,10 +365,12 @@ const sendMessage = async () => {
   // =========================
   // 1. 添加用户消息
   // =========================
-  messageList.value.push({
+  const userMsg = reactive({
+    localId: `local_user_${Date.now()}`,
     role: 'user',
     content: userText
   })
+  messageList.value.push(userMsg)
 
   // 清空输入框
   inputText.value = ''
@@ -349,6 +384,7 @@ const sendMessage = async () => {
   // 2. 添加 AI 占位消息
   // =========================
   const aiMsg = reactive({
+    localId: `local_ai_${Date.now()}`,
     role: 'ai',
     content: '正在整理学习建议...',
     contentType: 'student_answer',
@@ -396,6 +432,12 @@ const sendMessage = async () => {
     aiMsg.cards = resultData.cards || []
     aiMsg.traceId = resultData.traceId || ''
     aiMsg.isPending = false
+    if (resultData.messageId) {
+      aiMsg.id = resultData.messageId
+    }
+    if (resultData.userMessageId) {
+      userMsg.id = resultData.userMessageId
+    }
 
     if (resultData.sessionId) {
       activeSessionId.value = resultData.sessionId
@@ -509,16 +551,15 @@ onMounted(() => {
 }
 
 .history-item {
-  padding: 9px 10px;
+  padding: 9px 8px 9px 10px;
   border-radius: 8px;
   margin-bottom: 6px;
-  cursor: pointer;
   color: #333;
   font-size: 14px;
   transition: background 0.2s;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
 
 .history-item:hover {
@@ -528,6 +569,14 @@ onMounted(() => {
 .history-item.active {
   background: #e6f4ff;
   color: #1677ff;
+}
+
+.history-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
 }
 
 .history-title {
@@ -546,6 +595,28 @@ onMounted(() => {
   color: #4096ff;
 }
 
+.history-delete-btn {
+  opacity: 0;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.history-item:hover .history-delete-btn {
+  opacity: 1;
+}
+
+.history-delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
 /* ================= 右侧聊天区 ================= */
 .chat-area {
   flex: 1;
@@ -553,15 +624,16 @@ onMounted(() => {
   flex-direction: column;
   min-width: 0;
   background-color: #ffffff;
+  position: relative;
 }
 
-/* 顶部 */
-.chat-header {
-  height: 44px;
-  padding: 0 16px;
+.chat-sidebar-toggle {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  z-index: 3;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #f0f0f0;
 }
 
 .toggle-btn {
@@ -581,26 +653,10 @@ onMounted(() => {
   background: #f5f5f5;
 }
 
-.header-title {
-  margin-left: 10px;
-  font-weight: 500;
-  color: #333;
-  font-size: 15px;
-}
-
-.learning-cockpit {
-  display: grid;
-  grid-template-columns: 1.35fr 1.15fr 0.9fr;
-  gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #f0f0f0;
-  background: #fafafa;
-}
-
 /* 消息区 */
 .messages {
   flex: 1;
-  padding: 14px 24px;
+  padding: 24px 32px 120px;
   overflow-y: auto;
   scroll-behavior: smooth;
   min-height: 0;

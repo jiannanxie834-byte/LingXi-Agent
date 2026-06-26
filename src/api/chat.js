@@ -79,7 +79,8 @@ export const normalizeStudentChatData = (response) => {
   const data = response?.data || response || {}
   const message = data.message || {}
   const routeType = data.route_type || data.routeType || ''
-  const allowLearningDisplay = LEARNING_ROUTE_TYPES.has(routeType) || (!routeType && message.content_type !== 'conversation_reply')
+  const isPlain = PLAIN_ROUTE_TYPES.has(routeType) || message.content_type === 'conversation_reply'
+  const allowLearningDisplay = !isPlain && (LEARNING_ROUTE_TYPES.has(routeType) || (!routeType && message.content_type !== 'conversation_reply'))
 
   return {
     content: message.content || data.reply || '',
@@ -87,10 +88,12 @@ export const normalizeStudentChatData = (response) => {
     routeType,
     progress: allowLearningDisplay ? normalizeProgress(data.progress || []) : [],
     cards: allowLearningDisplay ? stripInternalFields(data.cards || []) : [],
-    traceId: SHOW_AGENT_TRACE ? data.trace_id || '' : '',
+    traceId: SHOW_AGENT_TRACE && !isPlain ? data.trace_id || '' : '',
     sessionId: data.session_id || '',
     session: data.session || null,
-    profile: data.profile || null
+    profile: isPlain ? null : data.profile || null,
+    messageId: data.message_id || data.assistant_message_id || '',
+    userMessageId: data.user_message_id || ''
   }
 }
 
@@ -103,6 +106,18 @@ export const getChatSessionsAPI = (username) => request({
 export const getChatMessagesAPI = (sessionId, username) => request({
   url: `/chat/sessions/${sessionId}/messages`,
   method: 'get',
+  params: { username }
+})
+
+export const deleteChatSessionAPI = (sessionId, username) => request({
+  url: `/chat/sessions/${sessionId}`,
+  method: 'delete',
+  params: { username }
+})
+
+export const deleteChatMessageAPI = (messageId, username) => request({
+  url: `/chat/messages/${messageId}`,
+  method: 'delete',
   params: { username }
 })
 

@@ -6,6 +6,15 @@
     </div>
 
     <div class="bubble">
+      <button
+        v-if="canDelete"
+        class="message-delete-btn"
+        title="删除消息"
+        @click.stop="$emit('delete', message)"
+      >
+        ×
+      </button>
+
       <div v-if="isUser" class="user-text">
         {{ message.content }}
       </div>
@@ -74,10 +83,13 @@ const props = defineProps({
   }
 })
 
+defineEmits(['delete'])
+
 const router = useRouter()
 
 // 计算属性：判断这条消息是不是用户发的
 const isUser = computed(() => props.message.role === 'user')
+const canDelete = computed(() => !props.message.isIntro && !props.message.isPending)
 
 const showAgentTrace = SHOW_AGENT_TRACE
 
@@ -222,6 +234,31 @@ const handleCardClick = (card) => {
   padding: 10px 14px;
   border-radius: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  position: relative;
+}
+
+.message-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.message-wrapper:hover .message-delete-btn {
+  opacity: 1;
+}
+
+.message-delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
 /* AI 气泡的特定样式 */
