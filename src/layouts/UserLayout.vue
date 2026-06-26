@@ -1,7 +1,7 @@
 <template>
   <div class="layout">
     <div class="header">
-      <div class="logo" @click="goPage('/')" style="cursor:pointer">灵析学伴</div>
+      <div class="logo" @click="goPage('/')" style="cursor:pointer">灵析学伴 · 深度学习</div>
       
       <div class="header-right">
         <el-button v-if="!userStore.isLoggedIn" type="primary" round @click="goToLogin">
@@ -88,7 +88,7 @@
 
     <div class="tabbar">
       <div :class="{ 'active': currentPath === '/' }" @click="goPage('/')">首页</div>
-      <div :class="{ 'active': currentPath === '/resource' }" @click="goPage('/resource')">资源</div>
+      <div :class="{ 'active': currentPath === '/resource' }" @click="goPage('/resource')">资源工厂</div>
       <div :class="{ 'active': currentPath === '/plan' }" @click="goPage('/plan')">规划</div>
       <div :class="{ 'active': currentPath === '/evaluation' }" @click="goPage('/evaluation')">评价</div>
       <div :class="{ 'active': currentPath === '/profile' }" @click="goPage('/profile')">我的</div>

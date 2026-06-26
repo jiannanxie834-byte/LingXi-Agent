@@ -142,17 +142,17 @@ const productCards = computed(() => {
         id: `resource-pending-${index}-${card.title}`,
         title: card.title || '配套资源正在教师审核',
         badge: statusLabel(card.status || 'pending_review'),
-        summary: card.summary || '配套资源已生成，正在进行教师审核。审核通过后会进入资源库。',
-        actionText: card.action_text || '审核通过后查看资源库',
+        summary: card.summary || '配套 Artifact 已生成，正在进行教师审核。审核通过后会进入资源工厂。',
+        actionText: card.action_text || '审核通过后查看资源工厂',
         actionRoute: card.action_route || '/resource',
         items: (card.items || []).slice(0, 4)
       })
       result.push({
         id: `resource-review-${index}-${card.title}`,
-        title: '审核通过后进入资源库',
+        title: '审核通过后进入资源工厂',
         badge: '待发布',
         summary: '当前只展示标题、类型和摘要。完整正文会在教师审核通过后开放。',
-        actionText: card.action_text || '审核通过后查看资源库',
+        actionText: card.action_text || '审核通过后查看资源工厂',
         actionRoute: card.action_route || '/resource',
         items: []
       })

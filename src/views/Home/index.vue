@@ -65,8 +65,14 @@
         </button>
 
         <span class="header-title">
-          当前对话：学习助手
+          当前对话：深度学习智能学习舱
         </span>
+      </div>
+
+      <div class="learning-cockpit">
+        <CourseMapGraph :active-unit="activeUnitId" />
+        <AgentProgressTimeline :steps="latestProgress" />
+        <ProfileDimensionPanel :profile="profileSnapshot" />
       </div>
 
       <!-- 消息区域 -->
@@ -109,12 +115,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted } from 'vue'
+import { ref, reactive, nextTick, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import ChatMessage from '@/components/ChatWindow/ChatMessage.vue'
+import AgentProgressTimeline from '@/components/AgentProgressTimeline.vue'
+import CourseMapGraph from '@/components/CourseMapGraph.vue'
+import ProfileDimensionPanel from '@/components/ProfileDimensionPanel.vue'
 import {
-  SHOW_AGENT_TRACE,
   getChatMessagesAPI,
   getChatSessionsAPI,
   normalizeStudentChatData,
@@ -141,27 +149,40 @@ const welcomeMessage = {
   role: 'ai',
   isIntro: true,
   content:
-    '你好，我是灵析学习助手。你可以直接问课程问题、生成练习题、规划学习路线，或获取学科实践任务。'
+    '你好，我是灵析学伴。你可以围绕《深度学习》课程直接提问，例如 CNN、反向传播、Transformer、PyTorch 图像分类实验，或让我生成讲解、题集、视频观看指南、交互动画和项目路线。'
 }
 
 const messageList = ref([{ ...welcomeMessage }])
+
+const latestAssistantMessage = computed(() => {
+  return [...messageList.value].reverse().find(item => item.role === 'ai' && !item.isIntro) || {}
+})
+
+const latestProgress = computed(() => latestAssistantMessage.value.progress || [])
+
+const activeUnitId = computed(() => {
+  const cards = latestAssistantMessage.value.cards || []
+  return cards.find(card => card.unit_id)?.unit_id || ''
+})
+
+const profileSnapshot = computed(() => ({
+  dimensions: userStore.profileDimensions || {},
+  radar: userStore.profileRadar || {},
+  updated_at: userStore.profileUpdatedAt || ''
+}))
 
 const currentUsername = () => userStore.username || 'student'
 
 const activeSessionStorageKey = () => `lingxi_active_chat_${currentUsername()}`
 
 const createPendingProgress = () => [
-  ...(SHOW_AGENT_TRACE
-    ? [
-      { key: 'understand', label: '理解需求', status: 'running' },
-      { key: 'collect', label: '整理资料', status: 'pending' },
-      { key: 'profile', label: '更新画像', status: 'pending' },
-      { key: 'answer', label: '生成建议', status: 'pending' },
-      { key: 'plan', label: '生成路线', status: 'pending' },
-      { key: 'resources', label: '整理资源', status: 'pending' },
-      { key: 'check', label: '完成检查', status: 'pending' }
-    ]
-    : [])
+  { key: 'understand', label: '理解需求', status: 'running' },
+  { key: 'collect', label: '整理资料', status: 'pending' },
+  { key: 'profile', label: '更新画像', status: 'pending' },
+  { key: 'answer', label: '生成建议', status: 'pending' },
+  { key: 'plan', label: '生成路线', status: 'pending' },
+  { key: 'resources', label: '整理资源', status: 'pending' },
+  { key: 'check', label: '完成检查', status: 'pending' }
 ]
 
 let progressTimer = null
@@ -565,6 +586,15 @@ onMounted(() => {
   font-weight: 500;
   color: #333;
   font-size: 15px;
+}
+
+.learning-cockpit {
+  display: grid;
+  grid-template-columns: 1.35fr 1.15fr 0.9fr;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
 }
 
 /* 消息区 */

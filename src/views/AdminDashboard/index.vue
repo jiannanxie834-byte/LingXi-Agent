@@ -47,10 +47,10 @@ import { getAdminStatsAPI } from '@/api/admin'
 
 const router = useRouter()
 
-// 1.  在前端把卡片的皮肤和骨架死死固化好，完美对应你的 HTML 模板
+// 1.  固化控制台卡片皮肤和骨架，对应当前 HTML 模板
 const statsCards = ref([
   { title: '全站注册总数', value: '0 人', tag: '活跃学生', bgColor: '#e6f7ff', color: '#1890ff', route: { path: '/admin/user' } },
-  { title: '知识库储备总数', value: '0 份', tag: '资源库', bgColor: '#f6ffed', color: '#52c41a', route: { path: '/admin/resource', query: { section: 'resources' } } },
+  { title: '知识库储备总数', value: '0 份', tag: '资源工厂', bgColor: '#f6ffed', color: '#52c41a', route: { path: '/admin/resource', query: { section: 'resources' } } },
   { title: '待审核资源', value: '0 件', tag: '安全合规', bgColor: '#fff7e6', color: '#fa8c16', route: { path: '/admin/resource', query: { section: 'resources', status: 'pending' } } },
   { title: '待审核资源分类', value: '0 类', tag: '分类治理', bgColor: '#f9f0ff', color: '#722ed1', route: { path: '/admin/resource', query: { section: 'types', status: 'pending' } } },
   { title: '待处理问题反馈', value: '0 件', tag: '待办', bgColor: '#fff1f0', color: '#f5222d', route: { path: '/admin/feedback' } }
@@ -75,7 +75,7 @@ const fetchDashboardData = async () => {
     if (res && res.code === 200) {
       const stats = res.data || {}
       
-      // 3. 精准投喂数字，把后端的“凡间活数据”注入前端的“漂亮皮肤”里
+      // 3. 将后端实时统计注入控制台卡片
       statsCards.value[0].value = `${stats.total_users} 人`
       statsCards.value[1].value = `${stats.total_resources} 份`
       statsCards.value[2].value = `${stats.pending_resources} 件`

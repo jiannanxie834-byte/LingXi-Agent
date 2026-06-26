@@ -1,6 +1,6 @@
 # LingXi-Agent 前端
 
-灵析学伴学生端与管理员端前端项目，基于 Vue 3、Vite、Pinia、Element Plus 构建。
+灵析学伴学生端与管理员端前端项目，定位为面向高校《深度学习》课程的个性化多模态资源生成与学习多智能体系统。项目基于 Vue 3、Vite、Pinia、Element Plus 构建，提供学生对话、资源工厂、学习规划、学习评价、动态画像和管理员审核流程。
 
 ## 主要目录
 
@@ -20,12 +20,12 @@ src/
 ```text
 /login                 登录/注册
 /                      学生端 AI 对话
-/resource              学生资源库
+/resource              学生深度学习资源工厂
 /plan                  个性化学习规划
 /evaluation            学习评价与错题诊断
 /profile               个人资料与学习画像
 /admin/dashboard       管理员控制台
-/admin/resource        资源审核与分类审核
+/admin/resource        Artifact 资源审核与分类审核
 /admin/user            学生用户管理
 /admin/feedback        问题反馈中心
 ```

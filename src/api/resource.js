@@ -2,6 +2,15 @@ import request from '@/utils/request'
 
 export const getPassedResourcesAPI = () => request({ url: '/resource/list/passed', method: 'get' })
 export const getPassedResourceBundlesAPI = () => request({ url: '/resource/bundles/passed', method: 'get' })
+export const getResourceArtifactsAPI = (params = {}) => request({
+  url: '/resource/artifacts',
+  method: 'get',
+  params
+})
+export const getResourceArtifactAPI = (artifactId) => request({
+  url: `/resource/artifacts/${artifactId}`,
+  method: 'get'
+})
 export const getRecommendedResourcesAPI = (username, limit = 12) => request({
   url: '/resource/recommendations',
   method: 'get',

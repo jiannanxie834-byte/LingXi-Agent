@@ -2,8 +2,8 @@
   <div class="login-container">
     <el-card class="login-card" shadow="always">
       <div class="logo-box">
-        <h2>灵析智能学伴 </h2>
-        <p>多智能体驱动的个性化学习平台</p>
+        <h2>灵析学伴 · 深度学习</h2>
+        <p>个性化多模态资源生成与学习多智能体系统</p>
       </div>
 
       <div class="mode-toggle">
@@ -138,7 +138,7 @@ const handleLogin = async () => {
       }
         userStore.login(userData)
       
-        ElMessage.success(`欢迎进入多智能体学习中枢，${userData.username}！`)
+        ElMessage.success(`欢迎进入深度学习智能学习舱，${userData.username}！`)
         router.push(userData.role === 'admin' ? '/admin/dashboard' : '/') 
       }
     } catch (error) {

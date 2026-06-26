@@ -66,7 +66,6 @@ const stripInternalFields = (value) => {
 }
 
 const normalizeProgress = (progress = []) => {
-  if (!SHOW_AGENT_TRACE) return []
   return (progress || [])
     .filter(item => item && PUBLIC_PROGRESS_LABELS[item.key])
     .map(item => ({

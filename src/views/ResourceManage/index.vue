@@ -6,7 +6,7 @@
       <div class="quick-review-panel">
         <div>
           <strong>演示快速审核</strong>
-          <p>按学生账号通过最近待审核资源，保留教师审核动作，便于演示资源进入学生资源库。</p>
+          <p>按学生账号通过最近待审核 Artifact，保留教师审核动作，便于演示资源进入学生端资源工厂。</p>
         </div>
         <div class="quick-review-actions">
           <el-input
@@ -211,7 +211,7 @@
         </div>
         <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
         <div v-if="isDeprecatedStandaloneType(selectedResource.type)" class="deprecated-resource-panel">
-          “多模态学习包”已调整为主题资源包聚合视图，不再作为独立资源正文生成。历史资源可保留查阅，待审核资源建议下架或改成具体资源类型。
+          多模态能力已调整为主题学习包聚合视图，不再作为独立资源正文生成。新资源应使用课程讲解文档、练习题集、PyTorch 实操案例、视频推荐卡、交互动画规格等 Artifact 类型。
         </div>
         <div v-if="selectedResource.review_comment" class="detail-review-comment">
           <strong>管理员审核意见</strong>
@@ -380,7 +380,7 @@ const statusTagType = (status) => {
   return 'warning'
 }
 
-const isDeprecatedStandaloneType = (type) => type === '多模态学习包'
+const isDeprecatedStandaloneType = () => false
 
 const askReviewComment = async ({ title, message, defaultValue = '' }) => {
   try {

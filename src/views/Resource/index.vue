@@ -2,7 +2,7 @@
   <div class="resource-page" v-loading="loading">
     
     <div class="filter-header">
-      <h2 class="page-title">高校初始知识库 / 资源库</h2>
+      <h2 class="page-title">深度学习资源工厂</h2>
       
       <div class="category-tabs">
         <div 
@@ -29,7 +29,7 @@
         </span>
       </div>
       <div class="upload-action-bar">
-        <el-button type="primary" @click="openUploadDialog">+ 贡献/上传初始课程资源</el-button>
+        <el-button type="primary" @click="openUploadDialog">+ 贡献/上传深度学习资源</el-button>
         <el-button type="warning" plain @click="handleProposeNewType">
           申请新资源分类
         </el-button>
@@ -68,33 +68,39 @@
 
     </div>
 
-    <el-dialog v-model="uploadVisible" title="贡献初始知识库资源" width="400px" destroy-on-close>
+    <el-dialog v-model="uploadVisible" title="贡献深度学习课程资源" width="400px" destroy-on-close>
       <el-form :model="uploadForm" label-width="80px">
         <el-form-item label="资源名称">
-          <el-input v-model="uploadForm.title" placeholder="如：Vue3组合式API进阶演练.pdf" />
+          <el-input v-model="uploadForm.title" placeholder="如：CNN卷积与池化实验讲义.pdf" />
         </el-form-item>
         <el-form-item label="资源类型">
           <el-select v-model="uploadForm.type" placeholder="请选择资源类型" style="width: 100%;">
-            <el-option label="专业课程讲解文档" value="专业课程讲解文档" />
+            <el-option label="课程讲解文档" value="课程讲解文档" />
             <el-option label="知识点思维导图" value="知识点思维导图" />
-            <el-option label="不同类型练习题目" value="不同类型练习题目" />
-            <el-option label="拓展阅读材料" value="拓展阅读材料" />
-            <el-option label="错题诊断与学习反馈报告" value="错题诊断与学习反馈报告" />
-            <el-option label="学科实践应用任务" value="学科实践应用任务" />
+            <el-option label="练习题集" value="练习题集" />
+            <el-option label="拓展阅读包" value="拓展阅读包" />
+            <el-option label="PyTorch 实操案例" value="PyTorch 实操案例" />
+            <el-option label="PPT 大纲" value="PPT 大纲" />
+            <el-option label="外部公开视频推荐卡" value="外部公开视频推荐卡" />
+            <el-option label="个性化视频观看指南" value="个性化视频观看指南" />
+            <el-option label="交互动画规格" value="交互动画规格" />
+            <el-option label="动画分镜" value="动画分镜" />
+            <el-option label="课程实践项目任务书" value="课程实践项目任务书" />
+            <el-option label="诊断与补弱报告" value="诊断与补弱报告" />
           </el-select>
         </el-form-item>
         <el-form-item label="资源摘要">
           <el-input v-model="uploadForm.summary" placeholder="简要说明这份资源适合解决什么学习问题" />
         </el-form-item>
         <el-form-item label="知识来源">
-          <el-input v-model="uploadForm.source" placeholder="如：人工智能第3章 / 官方文档 / 课堂讲义" />
+          <el-input v-model="uploadForm.source" placeholder="如：深度学习第7章 CNN / PyTorch 官方文档 / 课堂讲义" />
         </el-form-item>
         <el-form-item label="资源正文">
           <el-input
             v-model="uploadForm.content"
             type="textarea"
             :rows="6"
-            placeholder="支持 Markdown，可填写讲解、题目、实践任务或诊断报告"
+          placeholder="支持 Markdown，可填写讲解、题集、代码实验、视频观看指南、动画规格或项目任务书"
           />
         </el-form-item>
       </el-form>
@@ -161,7 +167,7 @@
         <h3>{{ selectedResource.title }}</h3>
         <div class="detail-meta">
           <el-tag>{{ selectedResource.type }}</el-tag>
-          <span>来源：{{ selectedResource.source || selectedResource.uploader || '课程资源库' }}</span>
+          <span>来源：{{ selectedResource.source || selectedResource.uploader || '深度学习课程资料' }}</span>
         </div>
         <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
         <div v-if="selectedResource.safety_review && selectedResource.safety_review.risk_level" class="safety-note">
@@ -169,7 +175,37 @@
           <strong>{{ selectedResource.safety_review.risk_level }}</strong>
           <em>{{ selectedResource.safety_review.score }}分，已进入管理员审核链路</em>
         </div>
-        <MarkdownRenderer :content="selectedResource.content || '暂无正文内容'" />
+        <div class="artifact-detail-panel">
+          <VideoRecommendationCard
+            v-if="isVideoRecommendation(selectedResource)"
+            :item="selectedArtifactPayload"
+          />
+          <PersonalizedVideoGuideCard
+            v-else-if="isVideoGuide(selectedResource)"
+            :guide="selectedArtifactPayload"
+          />
+          <InteractiveAnimationCard
+            v-else-if="isInteractiveAnimation(selectedResource)"
+            :artifact="selectedArtifactPayload"
+          />
+          <AnimationStoryboardCard
+            v-else-if="isStoryboard(selectedResource)"
+            :storyboard="selectedArtifactPayload"
+          />
+          <CodeLabCard
+            v-else-if="isCodeLab(selectedResource)"
+            :artifact="selectedArtifactPayload"
+          />
+          <ExerciseSetCard
+            v-else-if="isExerciseSet(selectedResource)"
+            :artifact="selectedArtifactPayload"
+          />
+          <PptExportCard
+            v-else-if="isPptArtifact(selectedResource)"
+            :artifact="selectedArtifactPayload"
+          />
+          <MarkdownRenderer v-else :content="selectedMarkdownContent" />
+        </div>
       </div>
       <template #footer>
         <el-button v-if="selectedResource && !selectedResource.auto_pushed && !selectedResource.auto_bundle" @click="downloadPptx(selectedResource)">导出PPT</el-button>
@@ -184,6 +220,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 //  引入接口：只拿通过审核的资源，以及前台上传接口
 import {
+  getResourceArtifactsAPI,
   getPassedTypesAPI,
   getPassedResourcesAPI,
   getPassedResourceBundlesAPI,
@@ -191,7 +228,14 @@ import {
   proposeTypeAPI,
   uploadResourceAPI
 } from '@/api/resource'
+import AnimationStoryboardCard from '@/components/AnimationStoryboardCard.vue'
+import CodeLabCard from '@/components/CodeLabCard.vue'
+import ExerciseSetCard from '@/components/ExerciseSetCard.vue'
+import InteractiveAnimationCard from '@/components/InteractiveAnimationCard.vue'
 import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
+import PersonalizedVideoGuideCard from '@/components/PersonalizedVideoGuideCard.vue'
+import PptExportCard from '@/components/PptExportCard.vue'
+import VideoRecommendationCard from '@/components/VideoRecommendationCard.vue'
 import { useUserStore } from '@/stores/user'
 
 const loading = ref(false)
@@ -210,6 +254,62 @@ const typeApplyForm = ref({
 const tabs = ref(['为你推荐', '全部'])
 const currentTab = ref('为你推荐')
 
+const parseStructuredContent = (value) => {
+  if (!value) return null
+  if (typeof value === 'object') return value
+  if (typeof value !== 'string') return null
+
+  const trimmed = value.trim()
+  if (!trimmed || !['{', '['].includes(trimmed.charAt(0))) return null
+
+  try {
+    return JSON.parse(trimmed)
+  } catch (error) {
+    return null
+  }
+}
+
+const normalizeArtifactResource = (resource = {}, artifact = {}) => {
+  const content = artifact.content || resource.content || ''
+  return {
+    ...resource,
+    ...artifact,
+    id: resource.id || artifact.resource_id || artifact.artifact_id,
+    resource_id: artifact.resource_id || resource.id || '',
+    artifact_id: artifact.artifact_id || resource.artifact_id || '',
+    title: artifact.title || resource.title || '未命名 Artifact',
+    type: artifact.type || resource.type || '学习资源',
+    summary: artifact.summary || resource.summary || '',
+    source: artifact.source || resource.source || '',
+    content,
+    content_format: artifact.content_format || resource.content_format || '',
+    status: artifact.status || resource.status || '',
+    quality_score: artifact.quality_score ?? resource.quality_score,
+    risk_level: artifact.risk_level || resource.risk_level,
+    personalization_reason: artifact.personalization_reason || resource.personalization_reason || '',
+    evidence_refs: artifact.evidence_refs || resource.evidence_refs || []
+  }
+}
+
+const mergeResourcesWithArtifacts = (resources = [], artifacts = []) => {
+  const artifactByResourceId = new Map()
+  artifacts.forEach(artifact => {
+    if (artifact.resource_id) artifactByResourceId.set(artifact.resource_id, artifact)
+  })
+
+  const seenResourceIds = new Set()
+  const merged = resources.map(resource => {
+    seenResourceIds.add(resource.id)
+    return normalizeArtifactResource(resource, artifactByResourceId.get(resource.id) || {})
+  })
+
+  const standaloneArtifacts = artifacts
+    .filter(artifact => !artifact.resource_id || !seenResourceIds.has(artifact.resource_id))
+    .map(artifact => normalizeArtifactResource({}, artifact))
+
+  return [...merged, ...standaloneArtifacts]
+}
+
 //  页面加载时，既拉取资源，也拉取动态分类
 const fetchTypesAndResources = async () => {
   loading.value = true
@@ -227,8 +327,14 @@ const fetchTypesAndResources = async () => {
     
     // 2. 拿通过的资源数据和个性化推荐数据，两类结果分别展示。
     const res = await getPassedResourcesAPI()
+    const artifactRes = await getResourceArtifactsAPI({
+      username: userStore.username || '',
+      status: 'published',
+      limit: 200
+    })
+    const artifacts = artifactRes && artifactRes.code === 200 ? artifactRes.data || [] : []
     if (res && res.code === 200) {
-      rawResources.value = res.data || []
+      rawResources.value = mergeResourcesWithArtifacts(res.data || [], artifacts)
     }
 
     const bundleRes = await getPassedResourceBundlesAPI()
@@ -315,13 +421,20 @@ const emptyDescription = computed(() => {
 // 2. 核心计算属性：根据当前点击的 Tab，动态过滤要展示的卡片
 const filteredResources = computed(() => {
   const aliases = {
-    '专业课程讲解文档': ['专业课程讲解文档', '课程文档', '文档'],
+    '课程讲解文档': ['课程讲解文档', '课程文档', '文档'],
     '知识点思维导图': ['知识点思维导图', '思维导图', '导图'],
-    '不同类型练习题目': ['不同类型练习题目', '练习题目', '练习题', '题库', '试卷'],
-    '拓展阅读材料': ['拓展阅读材料', '拓展阅读', '阅读材料'],
+    '练习题集': ['练习题集', '练习题目', '练习题', '题库', '试卷'],
+    '拓展阅读包': ['拓展阅读包', '拓展阅读', '阅读材料'],
+    'PyTorch 实操案例': ['PyTorch 实操案例', '代码实验', '实操案例', '代码案例'],
+    'PPT 大纲': ['PPT 大纲', '课件大纲', 'PPT'],
+    '可导出 PPTX': ['可导出 PPTX', 'PPTX'],
+    '外部公开视频推荐卡': ['外部公开视频推荐卡', '视频推荐', '公开课', '公开视频'],
+    '个性化视频观看指南': ['个性化视频观看指南', '观看指南', '视频指南'],
+    '交互动画规格': ['交互动画规格', '交互动画', '动画规格', '可视化动画'],
+    '动画分镜': ['动画分镜', '分镜', '脚本'],
+    '课程实践项目任务书': ['课程实践项目任务书', '项目任务书', '实践任务', '项目案例'],
     '主题学习包': ['主题学习包', '资源包', '学习包'],
-    '错题诊断与学习反馈报告': ['错题诊断与学习反馈报告', '错题诊断', '学习反馈', '诊断报告', '反馈报告'],
-    '学科实践应用任务': ['学科实践应用任务', '实践应用', '应用任务', '实践任务', '项目案例', '实验探究', '材料分析', '写作任务', '代码类实操案例', '实操案例', '代码案例']
+    '诊断与补弱报告': ['诊断与补弱报告', '错题诊断', '学习反馈', '诊断报告', '反馈报告']
   }
   const matchTypes = aliases[currentTab.value] || [currentTab.value]
   const keyword = searchKeyword.value.trim().toLowerCase()
@@ -361,7 +474,10 @@ const getCoverClass = (type) => {
   if (type.includes('导图')) return 'mindmap-cover'
   if (type.includes('文档')) return 'doc-cover'
   if (type.includes('诊断') || type.includes('反馈')) return 'feedback-cover'
-  if (type.includes('实践') || type.includes('应用')) return 'practice-cover'
+  if (type.includes('实践') || type.includes('项目') || type.includes('PyTorch') || type.includes('代码')) return 'practice-cover'
+  if (type.includes('视频') || type.includes('观看')) return 'video-cover'
+  if (type.includes('动画') || type.includes('分镜')) return 'animation-cover'
+  if (type.includes('PPT')) return 'ppt-cover'
   return 'generic-cover'
 }
 
@@ -370,6 +486,32 @@ const uploadVisible = ref(false)
 const uploadForm = ref({ title: '', type: '' })
 const detailVisible = ref(false)
 const selectedResource = ref(null)
+const selectedStructuredContent = computed(() => parseStructuredContent(selectedResource.value?.content))
+const selectedArtifactPayload = computed(() => {
+  const resource = selectedResource.value || {}
+  const structured = selectedStructuredContent.value
+  if (Array.isArray(structured)) {
+    return {
+      ...resource,
+      items: structured,
+      content: resource.content || ''
+    }
+  }
+  return {
+    ...resource,
+    ...(structured && typeof structured === 'object' ? structured : {})
+  }
+})
+const selectedMarkdownContent = computed(() => selectedResource.value?.content || '暂无正文内容')
+
+const typeText = (item = {}) => `${item.type || ''} ${item.content_format || ''}`.toLowerCase()
+const isVideoRecommendation = (item) => typeText(item).includes('视频推荐') || typeText(item).includes('video_recommendation')
+const isVideoGuide = (item) => typeText(item).includes('观看指南') || typeText(item).includes('personalized_video_guide')
+const isInteractiveAnimation = (item) => typeText(item).includes('交互动画') || typeText(item).includes('animation_spec')
+const isStoryboard = (item) => typeText(item).includes('动画分镜') || typeText(item).includes('animation_storyboard')
+const isCodeLab = (item) => typeText(item).includes('pytorch') || typeText(item).includes('代码实验') || typeText(item).includes('code_lab')
+const isExerciseSet = (item) => typeText(item).includes('练习题') || typeText(item).includes('exercise_set')
+const isPptArtifact = (item) => typeText(item).includes('ppt') || typeText(item).includes('pptx')
 
 const openUploadDialog = () => {
   uploadForm.value = { title: '', type: '', summary: '', source: '', content: '' }
@@ -405,6 +547,10 @@ const handleView = (item) => {
 }
 
 const downloadPptx = (item) => {
+  if (item?.artifact_id) {
+    window.open(`/api/resource/artifacts/${encodeURIComponent(item.artifact_id)}/export/pptx`, '_blank')
+    return
+  }
   if (!item?.id) return
   window.open(`/api/resource/export/pptx/${encodeURIComponent(item.id)}`, '_blank')
 }
@@ -529,6 +675,9 @@ const downloadPptx = (item) => {
 .doc-cover { background: linear-gradient(135deg, #ffd194 0%, #70e1f5 100%); }
 .feedback-cover { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); }
 .practice-cover { background: linear-gradient(135deg, #fddb92 0%, #d1fdff 100%); }
+.video-cover { background: linear-gradient(135deg, #fecdd3 0%, #bae6fd 100%); }
+.animation-cover { background: linear-gradient(135deg, #ddd6fe 0%, #bbf7d0 100%); }
+.ppt-cover { background: linear-gradient(135deg, #fde68a 0%, #c7d2fe 100%); }
 .bundle-cover { background: linear-gradient(135deg, #bfdbfe 0%, #bbf7d0 100%); }
 .generic-cover { background: linear-gradient(135deg, #dbeafe 0%, #e5e7eb 100%); }
 
@@ -608,6 +757,11 @@ const downloadPptx = (item) => {
 .safety-note em {
   color: #4b5563;
   font-style: normal;
+}
+.artifact-detail-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
 }
 .bundle-detail-list {
   display: grid;

@@ -154,7 +154,7 @@
           </div>
         </div>
         <div v-else class="profile-empty-state">
-          完成一次学习对话或学习评价后，系统会自动生成六维动态画像。
+          完成一次学习对话或学习评价后，系统会自动生成十维动态画像。
         </div>
       </el-card>
 
@@ -376,7 +376,18 @@ const handleUpdateProfile = async () => {
 
 const displayName = computed(() => userStore.nickname || userStore.username || '学伴新用户')
 const knowledgeTags = computed(() => userStore.tags || [])
-const radarLabels = ['知识基础', '自驱探索力', '实践动手能力', '学习专注度', '易错点修复', '认知匹配度']
+const radarLabels = [
+  '知识基础',
+  '学习目标',
+  '学习阶段',
+  '知识短板',
+  '认知风格',
+  '媒介偏好',
+  '实践能力',
+  '学习节奏',
+  '易错模式',
+  '兴趣方向'
+]
 const radarValues = computed(() => {
   if (!userStore.profileRadar || Object.keys(userStore.profileRadar).length === 0) {
     return radarLabels.map(() => 0)
@@ -391,12 +402,16 @@ const hasProfileData = computed(() => {
 // 判断当前是否真正没有画像数据，而不是按演示账号名硬编码判断
 const isNewUser = computed(() => !hasProfileData.value)
 const dimensionDescriptions = {
-  知识基础: '综合历史学习、评价和本轮对话估算当前基础。',
-  自驱探索力: '依据主动提问、计划创建和待办推进情况判断。',
-  实践动手能力: '反映实操训练、项目任务和实践资源偏好。',
-  学习专注度: '结合本轮交互长度、学习时长和任务连续性估算。',
-  易错点修复: '来自错题诊断、评价记录和薄弱点修复情况。',
-  认知匹配度: '衡量当前资源、路径与认知风格和主题偏好的匹配程度。'
+  知识基础: '结合本轮主题、同主题评价和历史学习证据估算。',
+  学习目标: '根据自然语言目标、规划需求和项目诉求判断清晰度。',
+  学习阶段: '反映当前主题处于入门、基础、进阶或待确认阶段。',
+  知识短板: '来自错题、评价、追问和补弱记录的薄弱点识别。',
+  认知风格: '衡量图解、代码、练习、项目等资源形式的匹配度。',
+  媒介偏好: '根据视频、导图、动画、文字等偏好动态更新。',
+  实践能力: '反映代码实验、项目任务和动手训练的准备度。',
+  学习节奏: '结合计划完成率、待办推进和学习强度判断。',
+  易错模式: '记录高频错误类型和系统补弱后的修复程度。',
+  兴趣方向: '概括近期关注知识点和深度学习应用方向。'
 }
 const dimensionColor = (value) => {
   if (value >= 85) return '#16a34a'

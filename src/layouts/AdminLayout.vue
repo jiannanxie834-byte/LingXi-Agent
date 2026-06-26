@@ -2,7 +2,7 @@
   <div class="admin-layout">
     <el-container class="layout-container">
       <el-aside width="240px" class="aside">
-        <div class="admin-logo">灵析学伴 · 管理后台</div>
+        <div class="admin-logo">灵析学伴 · 深度学习管理后台</div>
         <el-menu
           :default-active="activeMenu"
           class="el-menu-vertical"
@@ -17,7 +17,7 @@
           </el-menu-item>
           <el-menu-item index="/admin/resource">
             <el-icon><Files /></el-icon>
-            <span>资源库审核与管理</span>
+            <span>资源工厂审核与管理</span>
           </el-menu-item>
           <el-menu-item index="/admin/user">
             <el-icon><User /></el-icon>
@@ -78,7 +78,7 @@ const activeMenu = computed(() => route.path)
 const pageTitle = computed(() => {
   const map = {
     '/admin/dashboard': '控制台概览',
-    '/admin/resource': '资源库管理',
+    '/admin/resource': '资源工厂管理',
     '/admin/user': '学生用户管理',
     '/admin/feedback': '问题反馈中心'
   }
