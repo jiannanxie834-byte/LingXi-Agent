@@ -31,9 +31,9 @@ const description = computed(() => resource.value.summary || props.item.summary 
 const suggestedMinutes = computed(() => resource.value.suggested_minutes || resource.value.suggestedMinutes || 25)
 const qualityText = computed(() => {
   const review = resource.value.teaching_quality_review || {}
-  if (review.passed || review.status === 'passed') return '已完成教学质量校验'
-  if (resource.value.quality_level === 'curated') return '课程底座精选资源'
-  return '待教师复核'
+  if (review.passed || review.status === 'passed') return '适合本章学习'
+  if (resource.value.quality_level === 'curated') return '课程精选资源'
+  return '待补充完善'
 })
 </script>
 

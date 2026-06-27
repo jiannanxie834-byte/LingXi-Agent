@@ -436,9 +436,9 @@ const isPptArtifact = (item) => typeText(item).includes('ppt') || typeText(item)
 
 const qualityLabel = (item = {}) => {
   const review = item.teaching_quality_review || {}
-  if (review.passed || review.status === 'passed') return '已完成教学质量校验'
-  if (item.quality_level === 'curated') return '课程底座精选资源'
-  return '待教师复核'
+  if (review.passed || review.status === 'passed') return '适合本章学习'
+  if (item.quality_level === 'curated') return '课程精选资源'
+  return '待补充完善'
 }
 
 const getCoverClass = (type = '') => {
