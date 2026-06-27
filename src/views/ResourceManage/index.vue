@@ -72,7 +72,12 @@
               </div>
               <div v-if="scope.row.safety_review && scope.row.safety_review.risk_level" class="review-chip-line">
                 <span class="review-chip" :class="riskClass(scope.row.safety_review.risk_level)">
-                  内容自检 {{ scope.row.safety_review.risk_level }} · {{ scope.row.safety_review.score }}分
+                  内容安全 {{ scope.row.safety_review.risk_level }} · {{ scope.row.safety_review.score }}分
+                </span>
+              </div>
+              <div class="review-chip-line">
+                <span class="review-chip" :class="teachingQualityClass(scope.row.teaching_quality_review)">
+                  {{ teachingQualityText(scope.row.teaching_quality_review) }}
                 </span>
               </div>
             </div>
@@ -210,6 +215,9 @@
           <span>{{ selectedResource.time || '暂无时间' }}</span>
         </div>
         <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
+        <div v-if="shouldWarnTeachingQuality(selectedResource)" class="quality-warning-panel">
+          该资源教学内容不足，不建议通过审核。
+        </div>
         <div v-if="isDeprecatedStandaloneType(selectedResource.type)" class="deprecated-resource-panel">
           多模态能力已调整为主题学习包聚合视图，不再作为独立资源正文生成。新资源应使用课程讲解文档、练习题集、PyTorch 实操案例、视频推荐卡、交互动画规格等 Artifact 类型。
         </div>
@@ -235,6 +243,37 @@
               <p v-for="item in selectedResource.safety_review.suggestions || []" :key="item">{{ item }}</p>
             </div>
           </div>
+        </div>
+        <div class="teaching-quality-panel">
+          <div class="safety-head">
+            <span>教学质量门控</span>
+            <el-tag :type="teachingQualityTagType(selectedResource.teaching_quality_review)">
+              {{ teachingQualityText(selectedResource.teaching_quality_review) }}
+            </el-tag>
+          </div>
+          <div v-if="selectedResource.teaching_quality_review && selectedResource.teaching_quality_review.score" class="safety-grid">
+            <div>
+              <strong>质量问题</strong>
+              <p
+                v-for="item in selectedResource.teaching_quality_review.issues || []"
+                :key="item"
+              >
+                {{ item }}
+              </p>
+              <p v-if="!(selectedResource.teaching_quality_review.issues || []).length">暂无明显教学质量问题</p>
+            </div>
+            <div>
+              <strong>修订建议</strong>
+              <p
+                v-for="item in selectedResource.teaching_quality_review.repair_suggestions || []"
+                :key="item"
+              >
+                {{ item }}
+              </p>
+              <p v-if="!(selectedResource.teaching_quality_review.repair_suggestions || []).length">建议管理员继续核验公式、代码和证据引用</p>
+            </div>
+          </div>
+          <p v-else class="quality-unreviewed">教学质量：未评估</p>
         </div>
         <div class="agent-notes">{{ selectedResource.agent_notes || '暂无智能体说明' }}</div>
         <MarkdownRenderer :content="selectedResource.content || '暂无正文内容'" />
@@ -372,6 +411,37 @@ const riskClass = (riskLevel) => {
   if (riskLevel === '高风险') return 'risk-high'
   if (riskLevel === '中风险') return 'risk-medium'
   return 'risk-low'
+}
+
+const teachingQualityText = (review) => {
+  if (!review || !Number.isFinite(Number(review.score || review.teaching_quality_score))) return '教学质量：未评估'
+  const score = Number(review.score || review.teaching_quality_score)
+  if (review.passed || review.status === 'passed') return `教学质量：${score}分 · 已通过`
+  return score >= 80 ? `教学质量：${score}分 · 待复核` : '教学质量：未达标'
+}
+
+const teachingQualityTagType = (review) => {
+  if (!review || !Number.isFinite(Number(review.score || review.teaching_quality_score))) return 'info'
+  const score = Number(review.score || review.teaching_quality_score)
+  if (review.passed || review.status === 'passed' || score >= 80) return 'success'
+  if (score >= 60) return 'warning'
+  return 'danger'
+}
+
+const teachingQualityClass = (review) => {
+  const type = teachingQualityTagType(review)
+  if (type === 'success') return 'risk-low'
+  if (type === 'warning') return 'risk-medium'
+  if (type === 'danger') return 'risk-high'
+  return 'risk-unknown'
+}
+
+const plainTextLength = (value) => String(value || '').replace(/\s+/g, '').length
+
+const shouldWarnTeachingQuality = (resource) => {
+  const review = resource?.teaching_quality_review || {}
+  const score = Number(review.score || review.teaching_quality_score || 0)
+  return plainTextLength(resource?.content) < 1200 || (score > 0 && score < 80) || review.status === 'failed'
 }
 
 const statusTagType = (status) => {
@@ -742,6 +812,10 @@ onMounted(async () => {
   background: #fef2f2;
   color: #b91c1c;
 }
+.risk-unknown {
+  background: #f3f4f6;
+  color: #4b5563;
+}
 .action-group {
   display: flex;
   justify-content: center;
@@ -788,6 +862,16 @@ onMounted(async () => {
   color: #92400e;
   line-height: 1.7;
 }
+.quality-warning-panel {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 700;
+  line-height: 1.7;
+}
 .resource-detail h3 { margin: 0 0 12px; color: #1f2937; }
 .detail-meta { display: flex; align-items: center; gap: 10px; color: #6b7280; margin-bottom: 14px; }
 .summary { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; color: #374151; line-height: 1.7; }
@@ -817,6 +901,18 @@ onMounted(async () => {
   border-radius: 8px;
   background: #f8fafc;
   border: 1px solid #e5e7eb;
+}
+.teaching-quality-panel {
+  margin: 14px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+.quality-unreviewed {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
 }
 .safety-head {
   display: flex;
