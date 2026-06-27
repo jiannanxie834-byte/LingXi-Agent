@@ -2,6 +2,7 @@ import request from '@/utils/request'
 
 export const getPassedResourcesAPI = () => request({ url: '/resource/list/passed', method: 'get' })
 export const getPassedResourceBundlesAPI = () => request({ url: '/resource/bundles/passed', method: 'get' })
+export const getChapterResourceHubsAPI = () => request({ url: '/resource/chapter-hubs', method: 'get' })
 export const getResourceArtifactsAPI = (params = {}) => request({
   url: '/resource/artifacts',
   method: 'get',

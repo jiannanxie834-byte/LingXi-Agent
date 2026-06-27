@@ -40,6 +40,17 @@
           :name="tab.name"
         />
       </el-tabs>
+      <div class="governance-filter-bar">
+        <button
+          v-for="filter in governanceFilters"
+          :key="filter.value"
+          type="button"
+          :class="{ active: activeGovernanceFilter === filter.value }"
+          @click="activeGovernanceFilter = filter.value"
+        >
+          {{ filter.label }}
+        </button>
+      </div>
       <el-table :data="currentResourceList" row-key="id" border stripe class="resource-table">
         <el-table-column label="资源信息" min-width="260">
           <template #default="scope">
@@ -50,6 +61,29 @@
               <div class="resource-meta-line">
                 <span>{{ scope.row.id }}</span>
                 <span>{{ scope.row.time || '暂无时间' }}</span>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="治理指标" min-width="230">
+          <template #default="scope">
+            <div class="governance-cell">
+              <div class="chapter-line">{{ chapterLabel(scope.row) }}</div>
+              <div class="governance-chip-line">
+                <span class="governance-chip">{{ plainTextLength(scope.row.content) }} 字</span>
+                <span v-if="questionCount(scope.row.content)" class="governance-chip">{{ questionCount(scope.row.content) }} 题</span>
+                <span class="governance-chip" :class="{ strong: scope.row.is_chapter_primary }">
+                  {{ scope.row.is_chapter_primary ? '章节主资源' : '配套资源' }}
+                </span>
+                <span class="governance-chip" :class="{ strong: isStudentVisible(scope.row), muted: !isStudentVisible(scope.row) }">
+                  {{ isStudentVisible(scope.row) ? '学生端可见' : '学生端隐藏' }}
+                </span>
+              </div>
+              <div v-if="isArchivedStatus(scope.row.status)" class="archive-line">
+                {{ archiveStatusText(scope.row.status) }}
+              </div>
+              <div v-else-if="isLowQuality(scope.row)" class="archive-line warning">
+                低质量风险：建议合并或重写
               </div>
             </div>
           </template>
@@ -214,6 +248,17 @@
           <span>{{ selectedResource.uploader || 'system' }}</span>
           <span>{{ selectedResource.time || '暂无时间' }}</span>
         </div>
+        <div class="governance-detail-panel">
+          <strong>资源治理信息</strong>
+          <div class="governance-detail-grid">
+            <span>章节：{{ chapterLabel(selectedResource) }}</span>
+            <span>正文长度：{{ plainTextLength(selectedResource.content) }} 字</span>
+            <span>题目数量：{{ questionCount(selectedResource.content) || 0 }} 题</span>
+            <span>章节主资源：{{ selectedResource.is_chapter_primary ? '是' : '否' }}</span>
+            <span>质量等级：{{ selectedResource.quality_level || '未标注' }}</span>
+            <span>学生端展示：{{ isStudentVisible(selectedResource) ? '可见' : '隐藏' }}</span>
+          </div>
+        </div>
         <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
         <div v-if="shouldWarnTeachingQuality(selectedResource)" class="quality-warning-panel">
           该资源教学内容不足，不建议通过审核。
@@ -343,6 +388,7 @@ const resourceList = ref([])
 const typeList = ref([])
 const activeResourceStatus = ref('pending')
 const activeTypeStatus = ref('pending')
+const activeGovernanceFilter = ref('all')
 const detailVisible = ref(false)
 const selectedResource = ref(null)
 const resourceSectionRef = ref(null)
@@ -354,7 +400,8 @@ const quickReviewLoading = ref(false)
 const resourceStatusMap = {
   pending: { label: '未处理', status: '待审核' },
   approved: { label: '已通过', status: '已通过' },
-  rejected: { label: '未通过', status: '未通过' }
+  rejected: { label: '未通过', status: '未通过' },
+  archived: { label: '已归档', statuses: ['archived_shallow', 'merged_into_chapter_pack', 'legacy_demo_only'] }
 }
 
 const typeStatusMap = {
@@ -367,6 +414,25 @@ const normalizeStatusTab = (status) => {
   return ['pending', 'approved', 'rejected'].includes(status) ? status : 'pending'
 }
 
+const ARCHIVE_STATUSES = ['archived_shallow', 'merged_into_chapter_pack', 'legacy_demo_only']
+
+const governanceFilters = [
+  { label: '全部治理状态', value: 'all' },
+  { label: '低质量风险', value: 'low_quality' },
+  { label: '待合并/归档', value: 'pending_merge' },
+  { label: '已归档', value: 'archived' },
+  { label: '缺失章节', value: 'missing_chapter' },
+  { label: '章节主资源', value: 'chapter_primary' },
+  { label: '学生端可见', value: 'student_visible' }
+]
+
+const statusListOf = (config) => config?.statuses || [config?.status].filter(Boolean)
+
+const resourcesByStatusConfig = (config) => {
+  const statuses = statusListOf(config)
+  return resourceList.value.filter(item => statuses.includes((item.status || '').trim()))
+}
+
 const resourcesByStatus = (status) => {
   return resourceList.value.filter(item => (item.status || '').trim() === status)
 }
@@ -375,13 +441,13 @@ const resourceStatusTabs = computed(() => {
   return Object.entries(resourceStatusMap).map(([name, config]) => ({
     name,
     label: config.label,
-    count: resourcesByStatus(config.status).length
+    count: resourcesByStatusConfig(config).length
   }))
 })
 
 const currentResourceList = computed(() => {
-  const status = resourceStatusMap[activeResourceStatus.value]?.status || '待审核'
-  return resourcesByStatus(status)
+  const config = resourceStatusMap[activeResourceStatus.value] || resourceStatusMap.pending
+  return resourcesByStatusConfig(config).filter(matchesGovernanceFilter)
 })
 
 const typesByStatus = (status) => {
@@ -438,6 +504,54 @@ const teachingQualityClass = (review) => {
 
 const plainTextLength = (value) => String(value || '').replace(/\s+/g, '').length
 
+const questionCount = (value) => {
+  const matches = String(value || '').match(/(^|\n)###\s*题目\s*\d+/g)
+  return matches ? matches.length : 0
+}
+
+const isArchivedStatus = (status) => ARCHIVE_STATUSES.includes((status || '').trim())
+
+const archiveStatusText = (status) => {
+  const map = {
+    archived_shallow: '已归档：浅资源',
+    merged_into_chapter_pack: '已合并进章节学习包',
+    legacy_demo_only: '旧版演示资源，仅管理员追溯'
+  }
+  return map[status] || '已归档'
+}
+
+const chapterLabel = (resource = {}) => {
+  if (resource.chapter_title) return resource.chapter_title
+  if (resource.chapter_id) return resource.chapter_id
+  return '未绑定章节'
+}
+
+const isStudentVisible = (resource = {}) => {
+  return resource.status === '已通过' && resource.student_visible !== false && !isArchivedStatus(resource.status)
+}
+
+const isLowQuality = (resource = {}) => {
+  const review = resource.teaching_quality_review || {}
+  const score = Number(review.score || review.teaching_quality_score || 0)
+  if (review.status === 'failed' || review.fatal) return true
+  if (score > 0 && score < 80) return true
+  if (resource.type === '课程讲解文档' && plainTextLength(resource.content) < 3000) return true
+  if (resource.type === '练习题集' && questionCount(resource.content) < 8) return true
+  return plainTextLength(resource.content) < 1200 && !['知识点思维导图', '交互动画规格', '动画分镜'].includes(resource.type)
+}
+
+const matchesGovernanceFilter = (resource) => {
+  const filter = activeGovernanceFilter.value
+  if (filter === 'all') return true
+  if (filter === 'low_quality') return isLowQuality(resource)
+  if (filter === 'pending_merge') return isLowQuality(resource) || resource.status === 'merged_into_chapter_pack'
+  if (filter === 'archived') return isArchivedStatus(resource.status)
+  if (filter === 'missing_chapter') return !resource.chapter_id && !resource.chapter_title
+  if (filter === 'chapter_primary') return !!resource.is_chapter_primary
+  if (filter === 'student_visible') return isStudentVisible(resource)
+  return true
+}
+
 const shouldWarnTeachingQuality = (resource) => {
   const review = resource?.teaching_quality_review || {}
   const score = Number(review.score || review.teaching_quality_score || 0)
@@ -447,6 +561,7 @@ const shouldWarnTeachingQuality = (resource) => {
 const statusTagType = (status) => {
   if (status === '已通过') return 'success'
   if (status === '未通过') return 'danger'
+  if (isArchivedStatus(status)) return 'info'
   return 'warning'
 }
 
@@ -721,10 +836,73 @@ onMounted(async () => {
 .resource-status-tabs :deep(.el-tabs__item) {
   font-weight: 600;
 }
+.governance-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.governance-filter-bar button {
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #4b5563;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.governance-filter-bar button.active {
+  border-color: #1677ff;
+  background: #eff6ff;
+  color: #1677ff;
+  font-weight: 700;
+}
 .section-box h2 { margin: 0; font-size: 18px; color: #333; border-left: 4px solid #1890ff; padding-left: 10px; }
 .resource-main-cell,
 .source-cell {
   min-width: 0;
+}
+.governance-cell {
+  min-width: 0;
+}
+.chapter-line {
+  color: #1f2937;
+  font-weight: 700;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.governance-chip-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.governance-chip {
+  display: inline-flex;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #4b5563;
+  padding: 3px 7px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.governance-chip.strong {
+  background: #ecfdf5;
+  color: #047857;
+}
+.governance-chip.muted {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+.archive-line {
+  margin-top: 7px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.archive-line.warning {
+  color: #b45309;
 }
 .resource-title-btn {
   display: block;
@@ -875,6 +1053,26 @@ onMounted(async () => {
 .resource-detail h3 { margin: 0 0 12px; color: #1f2937; }
 .detail-meta { display: flex; align-items: center; gap: 10px; color: #6b7280; margin-bottom: 14px; }
 .summary { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; color: #374151; line-height: 1.7; }
+.governance-detail-panel {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+}
+.governance-detail-panel strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #1f2937;
+}
+.governance-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.45;
+}
 .detail-review-comment {
   margin: 12px 0;
   padding: 12px;

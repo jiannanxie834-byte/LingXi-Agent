@@ -1,75 +1,109 @@
 <template>
   <div class="resource-page" v-loading="loading">
-    
-    <div class="filter-header">
-      <h2 class="page-title">深度学习资源工厂</h2>
-      
-      <div class="category-tabs">
-        <div 
-          v-for="tab in tabs" 
-          :key="tab" 
-          class="tab" 
-          :class="{ active: currentTab === tab }"
-          @click="handleTabClick(tab)"
-        >
-          {{ tab }}
-        </div>
+    <header class="resource-topbar">
+      <div>
+        <span class="course-label">灵析学伴 · 深度学习</span>
+        <h1>《深度学习》课程资源中心</h1>
       </div>
-    </div>
+      <div class="mode-tabs">
+        <button
+          v-for="mode in modes"
+          :key="mode"
+          type="button"
+          :class="{ active: currentMode === mode }"
+          @click="currentMode = mode"
+        >
+          {{ mode }}
+        </button>
+      </div>
+    </header>
 
     <div class="resource-toolbar">
-      <div class="search-box">
-        <el-input
-          v-model="searchKeyword"
-          clearable
-          placeholder="搜索知识点、资源名称、来源或正文内容"
-        />
-        <span class="result-count">
-          {{ resultCountText }}
-        </span>
-      </div>
+      <el-input
+        v-model="searchKeyword"
+        clearable
+        placeholder="搜索章节、知识点、资源名称或正文内容"
+      />
+      <span class="result-count">{{ resultCountText }}</span>
       <div class="upload-action-bar">
         <el-button type="primary" @click="openUploadDialog">+ 贡献/上传深度学习资源</el-button>
-        <el-button type="warning" plain @click="handleProposeNewType">
-          申请新资源分类
-        </el-button>
+        <el-button type="warning" plain @click="handleProposeNewType">申请新资源分类</el-button>
       </div>
     </div>
 
-    <el-empty 
-      v-if="filteredResources.length === 0" 
-      :description="emptyDescription" 
-    />
+    <div v-if="currentMode === '章节学习中心'" class="chapter-layout">
+      <ChapterResourceSidebar
+        :chapters="chapterHubs"
+        :selected-chapter-id="selectedChapterId"
+        @select="selectedChapterId = $event"
+      />
 
-    <div v-else class="resource-grid">
-      
-      <div v-for="item in filteredResources" :key="item.id" class="resource-card" :class="{ 'bundle-card': item.auto_bundle }">
-        <div class="card-cover" :class="getCoverClass(item.type)">
-          <span class="tag">{{ item.type }}</span>
-        </div>
-        <div class="card-info">
-          <h3 :title="item.title">{{ item.title }}</h3>
-          <p class="desc" v-if="item.auto_bundle">
-            {{ item.resource_count || 0 }} 份资源 · {{ item.summary || '主题资源聚合视图' }}
-          </p>
-          <p class="desc" v-else>资源编码: {{ item.id }} · 状态: 正常开放</p>
-          <div v-if="item.auto_bundle" class="bundle-type-row">
-            <span v-for="child in (item.items || []).slice(0, 4)" :key="`${item.id}-${child.type}`">
-              {{ child.type }}
-            </span>
-          </div>
-          <div class="action-bar">
-            <button class="view-btn" @click="handleView(item)">
-              {{ item.auto_bundle ? '查看学习包' : '查阅资源' }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <main class="chapter-main">
+        <template v-if="searchKeyword.trim()">
+          <section class="search-results">
+            <h2>按章节分组的搜索结果</h2>
+            <el-empty v-if="groupedSearchResults.length === 0" description="没有匹配到章节资源，换个关键词试试" />
+            <div v-for="group in groupedSearchResults" :key="group.chapter_id" class="search-group">
+              <h3>{{ group.chapter_title }}</h3>
+              <ChapterResourceSection
+                v-for="item in group.items"
+                :key="item.source_file || item.resource_key"
+                :item="item"
+                :chapter-title="group.chapter_title"
+                @view="handleView"
+              />
+            </div>
+          </section>
+        </template>
+        <ChapterResourceHub
+          v-else
+          :hub="selectedHub"
+          @view="handleView"
+        />
+      </main>
 
+      <aside class="chapter-aside">
+        <div class="aside-card">
+          <strong>本章学习建议</strong>
+          <p>{{ selectedHub?.summary || '请选择一个章节开始学习。' }}</p>
+        </div>
+        <div class="aside-card">
+          <strong>推荐下一章</strong>
+          <button v-if="nextHub" type="button" @click="selectedChapterId = nextHub.chapter_id">
+            {{ nextHub.chapter_title }}
+          </button>
+          <p v-else>已经到达课程综合项目，可以进入项目报告与答辩准备。</p>
+        </div>
+      </aside>
     </div>
 
-    <el-dialog v-model="uploadVisible" title="贡献深度学习课程资源" width="400px" destroy-on-close>
-      <el-form :model="uploadForm" label-width="80px">
+    <section v-else class="resource-list-mode">
+      <el-empty v-if="filteredFlatResources.length === 0" :description="emptyDescription" />
+      <div v-else class="resource-grid">
+        <article
+          v-for="item in filteredFlatResources"
+          :key="item.artifact_id || item.id"
+          class="resource-card"
+        >
+          <div class="card-cover" :class="getCoverClass(item.type)">
+            <span class="tag">{{ item.type }}</span>
+          </div>
+          <div class="card-info">
+            <h3 class="artifact-title">{{ item.title }}</h3>
+            <p>{{ item.summary || '课程资源' }}</p>
+            <div class="student-meta">
+              <span>{{ item.chapter_title || '深度学习课程' }}</span>
+              <span>建议 {{ item.suggested_minutes || 25 }} 分钟</span>
+              <span>{{ qualityLabel(item) }}</span>
+            </div>
+            <button class="view-btn" type="button" @click="handleView(item)">开始学习</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <el-dialog v-model="uploadVisible" title="贡献深度学习课程资源" width="420px" destroy-on-close>
+      <el-form :model="uploadForm" label-width="82px">
         <el-form-item label="资源名称">
           <el-input v-model="uploadForm.title" placeholder="如：CNN卷积与池化实验讲义.pdf" />
         </el-form-item>
@@ -80,13 +114,9 @@
             <el-option label="练习题集" value="练习题集" />
             <el-option label="拓展阅读包" value="拓展阅读包" />
             <el-option label="PyTorch 实操案例" value="PyTorch 实操案例" />
-            <el-option label="PPT 大纲" value="PPT 大纲" />
-            <el-option label="外部公开视频推荐卡" value="外部公开视频推荐卡" />
             <el-option label="个性化视频观看指南" value="个性化视频观看指南" />
             <el-option label="交互动画规格" value="交互动画规格" />
-            <el-option label="动画分镜" value="动画分镜" />
             <el-option label="课程实践项目任务书" value="课程实践项目任务书" />
-            <el-option label="诊断与补弱报告" value="诊断与补弱报告" />
           </el-select>
         </el-form-item>
         <el-form-item label="资源摘要">
@@ -100,7 +130,7 @@
             v-model="uploadForm.content"
             type="textarea"
             :rows="6"
-          placeholder="支持 Markdown，可填写讲解、题集、代码实验、视频观看指南、动画规格或项目任务书"
+            placeholder="支持 Markdown，可填写讲解、题集、代码实验、视频观看指南或项目任务书"
           />
         </el-form-item>
       </el-form>
@@ -140,51 +170,15 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" title="学习资源详情" width="760px" destroy-on-close>
-      <div v-if="selectedResource && selectedResource.auto_bundle" class="resource-detail">
-        <h3>{{ selectedResource.title }}</h3>
-        <div class="detail-meta">
-          <el-tag>主题学习包</el-tag>
-          <span>{{ selectedResource.topic }}</span>
-          <span>{{ selectedResource.resource_count || 0 }} 份资源</span>
-        </div>
-        <p class="summary">{{ selectedResource.summary }}</p>
-        <div class="bundle-detail-list">
-          <button
-            v-for="child in selectedResource.items || []"
-            :key="child.id"
-            type="button"
-            class="bundle-detail-item"
-            @click="handleView(child)"
-          >
-            <span>{{ child.type }}</span>
-            <strong>{{ child.title }}</strong>
-            <em>{{ child.summary || '暂无摘要' }}</em>
-          </button>
-        </div>
-      </div>
-      <div v-else-if="selectedResource" class="resource-detail">
+    <el-dialog v-model="detailVisible" title="学习资源详情" width="820px" destroy-on-close>
+      <div v-if="selectedResource" class="resource-detail">
         <h3>{{ selectedResource.title }}</h3>
         <div class="detail-meta">
           <el-tag>{{ selectedResource.type }}</el-tag>
-          <span>来源：{{ selectedResource.source || selectedResource.uploader || '深度学习课程资料' }}</span>
+          <span>{{ selectedResource.chapter_title || selectedResource.source || '深度学习课程资料' }}</span>
+          <span>{{ qualityLabel(selectedResource) }}</span>
         </div>
         <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
-        <div v-if="selectedResource.safety_review && selectedResource.safety_review.risk_level" class="safety-note">
-          <span>内容自检</span>
-          <strong>{{ selectedResource.safety_review.risk_level }}</strong>
-          <em>{{ selectedResource.safety_review.score }}分，已进入管理员审核链路</em>
-        </div>
-        <div v-if="selectedTeachingReview.scoreLabel" class="quality-note">
-          <span>教学质量</span>
-          <strong>{{ selectedTeachingReview.scoreLabel }}</strong>
-          <em>{{ selectedTeachingReview.statusLabel }}</em>
-        </div>
-        <div v-if="selectedEvidenceReview.label" class="evidence-note">
-          <span>证据完整性</span>
-          <strong>{{ selectedEvidenceReview.label }}</strong>
-          <em>{{ selectedEvidenceReview.refs }}</em>
-        </div>
         <div class="artifact-detail-panel">
           <VideoRecommendationCard
             v-if="isVideoRecommendation(selectedResource)"
@@ -218,7 +212,7 @@
         </div>
       </div>
       <template #footer>
-        <el-button v-if="selectedResource && !selectedResource.auto_pushed && !selectedResource.auto_bundle" @click="downloadPptx(selectedResource)">导出PPT</el-button>
+        <el-button v-if="selectedResource && !selectedResource.auto_pushed" @click="downloadPptx(selectedResource)">导出PPT</el-button>
         <el-button type="primary" @click="detailVisible = false">我知道了</el-button>
       </template>
     </el-dialog>
@@ -229,17 +223,10 @@
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-//  引入接口：只拿通过审核的资源，以及前台上传接口
-import {
-  getResourceArtifactsAPI,
-  getPassedTypesAPI,
-  getPassedResourcesAPI,
-  getPassedResourceBundlesAPI,
-  getRecommendedResourcesAPI,
-  proposeTypeAPI,
-  uploadResourceAPI
-} from '@/api/resource'
 import AnimationStoryboardCard from '@/components/AnimationStoryboardCard.vue'
+import ChapterResourceHub from '@/components/ChapterResourceHub.vue'
+import ChapterResourceSection from '@/components/ChapterResourceSection.vue'
+import ChapterResourceSidebar from '@/components/ChapterResourceSidebar.vue'
 import CodeLabCard from '@/components/CodeLabCard.vue'
 import ExerciseSetCard from '@/components/ExerciseSetCard.vue'
 import InteractiveAnimationCard from '@/components/InteractiveAnimationCard.vue'
@@ -247,34 +234,42 @@ import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
 import PersonalizedVideoGuideCard from '@/components/PersonalizedVideoGuideCard.vue'
 import PptExportCard from '@/components/PptExportCard.vue'
 import VideoRecommendationCard from '@/components/VideoRecommendationCard.vue'
+import {
+  getChapterResourceHubsAPI,
+  getResourceArtifactsAPI,
+  getPassedResourcesAPI,
+  getRecommendedResourcesAPI,
+  proposeTypeAPI,
+  uploadResourceAPI
+} from '@/api/resource'
 import { useUserStore } from '@/stores/user'
 
 const loading = ref(false)
-const userStore = useUserStore()
 const route = useRoute()
+const userStore = useUserStore()
 const RECOMMENDATION_LIMIT = 80
-const rawResources = ref([]) // 从后端拿到的全量“已通过”资源
-const recommendedResources = ref([])
-const resourceBundles = ref([])
-const recommendLoadFailed = ref(false)
+const modes = ['章节学习中心', '为你推荐', '全部资源']
+const currentMode = ref('章节学习中心')
 const searchKeyword = ref('')
+const chapterHubs = ref([])
+const selectedChapterId = ref('')
+const rawResources = ref([])
+const recommendedResources = ref([])
+const recommendLoadFailed = ref(false)
+const uploadVisible = ref(false)
 const typeApplyVisible = ref(false)
 const typeApplyLoading = ref(false)
-const typeApplyForm = ref({
-  name: '',
-  reason: ''
-})
-const tabs = ref(['为你推荐', '全部'])
-const currentTab = ref('为你推荐')
+const uploadForm = ref({ title: '', type: '', summary: '', source: '', content: '' })
+const typeApplyForm = ref({ name: '', reason: '' })
+const detailVisible = ref(false)
+const selectedResource = ref(null)
 
 const parseStructuredContent = (value) => {
   if (!value) return null
   if (typeof value === 'object') return value
   if (typeof value !== 'string') return null
-
   const trimmed = value.trim()
   if (!trimmed || !['{', '['].includes(trimmed.charAt(0))) return null
-
   try {
     return JSON.parse(trimmed)
   } catch (error) {
@@ -283,25 +278,33 @@ const parseStructuredContent = (value) => {
 }
 
 const normalizeArtifactResource = (resource = {}, artifact = {}) => {
+  const metadata = resource.metadata || artifact.metadata || {}
   const content = artifact.content || resource.content || ''
   return {
     ...resource,
     ...artifact,
+    metadata,
     id: resource.id || artifact.resource_id || artifact.artifact_id,
     resource_id: artifact.resource_id || resource.id || '',
     artifact_id: artifact.artifact_id || resource.artifact_id || '',
     unit_id: artifact.unit_id || resource.unit_id || (artifact.unit_ids || resource.unit_ids || [])[0] || '',
     unit_ids: artifact.unit_ids || resource.unit_ids || [],
-    title: artifact.title || resource.title || '未命名 Artifact',
+    title: artifact.title || resource.title || '未命名资源',
     type: artifact.type || resource.type || '学习资源',
     summary: artifact.summary || resource.summary || '',
     source: artifact.source || resource.source || '',
     content,
     content_format: artifact.content_format || resource.content_format || '',
-    status: artifact.status || resource.status || '',
     quality_score: artifact.quality_score ?? resource.quality_score,
     risk_level: artifact.risk_level || resource.risk_level,
-    personalization_reason: artifact.personalization_reason || resource.personalization_reason || '',
+    chapter_id: resource.chapter_id || metadata.chapter_id || '',
+    chapter_no: resource.chapter_no || metadata.chapter_no || '',
+    chapter_title: resource.chapter_title || metadata.chapter_title || '',
+    source_file: resource.source_file || metadata.source_file || '',
+    suggested_minutes: resource.suggested_minutes || metadata.suggested_minutes || 25,
+    quality_level: resource.quality_level || metadata.quality_level || '',
+    teaching_quality_review: artifact.teaching_quality_review || resource.teaching_quality_review || {},
+    personalization_reason: '',
     evidence_refs: artifact.evidence_refs || resource.evidence_refs || []
   }
 }
@@ -311,63 +314,40 @@ const mergeResourcesWithArtifacts = (resources = [], artifacts = []) => {
   artifacts.forEach(artifact => {
     if (artifact.resource_id) artifactByResourceId.set(artifact.resource_id, artifact)
   })
-
   const seenResourceIds = new Set()
   const merged = resources.map(resource => {
     seenResourceIds.add(resource.id)
     return normalizeArtifactResource(resource, artifactByResourceId.get(resource.id) || {})
   })
-
   const standaloneArtifacts = artifacts
     .filter(artifact => !artifact.resource_id || !seenResourceIds.has(artifact.resource_id))
     .map(artifact => normalizeArtifactResource({}, artifact))
-
   return [...merged, ...standaloneArtifacts]
 }
 
-//  页面加载时，既拉取资源，也拉取动态分类
-const fetchTypesAndResources = async () => {
+const fetchData = async () => {
   loading.value = true
   try {
-    // 1. 从后端拿已经通过审核的动态分类
-    const typeRes = await getPassedTypesAPI()
-    if (typeRes && typeRes.code === 200) {
-      tabs.value = Array.from(new Set([
-        '为你推荐',
-        '主题学习包',
-        '全部',
-        ...(typeRes.data || []).filter(item => item !== '多模态学习包')
-      ]))
+    const [chapterRes, res, artifactRes, recommendRes] = await Promise.all([
+      getChapterResourceHubsAPI(),
+      getPassedResourcesAPI(),
+      getResourceArtifactsAPI({ username: userStore.username || '', status: 'published', limit: 200 }),
+      getRecommendedResourcesAPI(userStore.username || 'student', RECOMMENDATION_LIMIT)
+    ])
+    chapterHubs.value = chapterRes?.code === 200 ? chapterRes.data || [] : []
+    if (!selectedChapterId.value && chapterHubs.value.length) {
+      selectedChapterId.value = chapterHubs.value[0].chapter_id
     }
-    
-    // 2. 拿通过的资源数据和个性化推荐数据，两类结果分别展示。
-    const res = await getPassedResourcesAPI()
-    const artifactRes = await getResourceArtifactsAPI({
-      username: userStore.username || '',
-      status: 'published',
-      limit: 200
-    })
-    const artifacts = artifactRes && artifactRes.code === 200 ? artifactRes.data || [] : []
-    if (res && res.code === 200) {
-      rawResources.value = mergeResourcesWithArtifacts(res.data || [], artifacts)
-    }
-
-    const bundleRes = await getPassedResourceBundlesAPI()
-    if (bundleRes && bundleRes.code === 200) {
-      resourceBundles.value = bundleRes.data || []
-    }
-
-    const recommendRes = await getRecommendedResourcesAPI(userStore.username || 'student', RECOMMENDATION_LIMIT)
-    if (recommendRes && recommendRes.code === 200) {
+    const artifacts = artifactRes?.code === 200 ? artifactRes.data || [] : []
+    rawResources.value = res?.code === 200 ? mergeResourcesWithArtifacts(res.data || [], artifacts) : []
+    if (recommendRes?.code === 200) {
       recommendedResources.value = recommendRes.data || []
       recommendLoadFailed.value = false
     } else {
-      recommendLoadFailed.value = true
       recommendedResources.value = []
-      ElMessage.error(recommendRes?.message || '个性化推荐加载失败')
+      recommendLoadFailed.value = true
     }
   } catch (error) {
-    recommendLoadFailed.value = true
     console.error(error)
     ElMessage.error('资源数据加载失败')
   } finally {
@@ -375,164 +355,93 @@ const fetchTypesAndResources = async () => {
   }
 }
 
-const handleProposeNewType = () => {
-  typeApplyForm.value = {
-    name: '',
-    reason: ''
-  }
-  typeApplyVisible.value = true
-}
-
-const submitNewTypeApplication = async () => {
-  const newTypeName = typeApplyForm.value.name.trim()
-
-  if (!newTypeName) {
-    return ElMessage.warning('请填写资源分类名称')
-  }
-  if (tabs.value.includes(newTypeName)) {
-    return ElMessage.warning('该分类已经存在')
-  }
-
-  typeApplyLoading.value = true
-  try {
-    const res = await proposeTypeAPI(
-      newTypeName,
-      userStore.username,
-      typeApplyForm.value.reason.trim()
-    )
-    if (res && res.code === 200) {
-      ElMessage.success('申请已提交后台！管理员通过后，本页面会自动出现该分类。')
-      typeApplyVisible.value = false
-    }
-  } catch (error) {
-    console.error('申请新分类失败:', error)
-  } finally {
-    typeApplyLoading.value = false
-  }
-}
-
-onMounted(async () => {
-  await fetchTypesAndResources()
-  await applyRouteQuery()
+const selectedHub = computed(() => chapterHubs.value.find(item => item.chapter_id === selectedChapterId.value) || chapterHubs.value[0] || null)
+const nextHub = computed(() => {
+  if (!selectedHub.value) return null
+  const index = chapterHubs.value.findIndex(item => item.chapter_id === selectedHub.value.chapter_id)
+  return index >= 0 ? chapterHubs.value[index + 1] || null : null
 })
 
-const isRecommendTab = computed(() => currentTab.value === '为你推荐')
-const isBundleTab = computed(() => currentTab.value === '主题学习包')
+const flatResources = computed(() => currentMode.value === '为你推荐' ? recommendedResources.value : rawResources.value)
 
-const sourceResources = computed(() => {
-  if (isBundleTab.value) return resourceBundles.value
-  if (!isRecommendTab.value) return rawResources.value
-  return recommendedResources.value
+const searchableText = (item = {}) => [
+  item.title,
+  item.type,
+  item.summary,
+  item.source,
+  item.content,
+  item.chapter_title,
+  item.source_file,
+  item.resource?.title,
+  item.resource?.summary,
+  item.resource?.content
+].join('\n').toLowerCase()
+
+const filteredFlatResources = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  return flatResources.value.filter(item => !keyword || searchableText(item).includes(keyword))
 })
 
-const sourceResourceCount = computed(() => sourceResources.value.length)
+const groupedSearchResults = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return []
+  return chapterHubs.value
+    .map(hub => {
+      const resources = [
+        ...(hub.primary_resources || []),
+        ...(hub.optional_resources || [])
+      ].filter(item => searchableText({ ...item, chapter_title: hub.chapter_title }).includes(keyword))
+      return { ...hub, items: resources }
+    })
+    .filter(group => group.items.length > 0)
+})
+
 const resultCountText = computed(() => {
-  if (isRecommendTab.value) {
-    return `已筛选 ${filteredResources.value.length} / 推荐 ${recommendedResources.value.length} 份 · 资源库共 ${rawResources.value.length} 份`
+  if (currentMode.value === '章节学习中心') {
+    if (searchKeyword.value.trim()) {
+      const total = groupedSearchResults.value.reduce((sum, group) => sum + group.items.length, 0)
+      return `搜索命中 ${groupedSearchResults.value.length} 个章节 · ${total} 份资源`
+    }
+    return `课程共 ${chapterHubs.value.length} 章 · 精选 ${rawResources.value.filter(item => item.display_in_chapter_hub).length || rawResources.value.length} 份资源`
   }
-  if (isBundleTab.value) {
-    return `已筛选 ${filteredResources.value.length} / 学习包 ${resourceBundles.value.length} 个`
+  if (currentMode.value === '为你推荐') {
+    return `已筛选 ${filteredFlatResources.value.length} / 推荐 ${recommendedResources.value.length} 份`
   }
-  return `已筛选 ${filteredResources.value.length} / ${sourceResourceCount.value} 份`
+  return `已筛选 ${filteredFlatResources.value.length} / ${rawResources.value.length} 份`
 })
 
 const emptyDescription = computed(() => {
   if (searchKeyword.value) return '没有匹配到资源，换个关键词试试'
-  if (isRecommendTab.value && recommendLoadFailed.value) return '个性化推荐加载失败，请检查后端推荐服务'
-  if (isRecommendTab.value) return '当前画像和学习记录暂未匹配到推荐资源'
-  return '该分类下暂无已放行的资源，去上传一份等待管理员审批吧~'
+  if (currentMode.value === '为你推荐' && recommendLoadFailed.value) return '个性化推荐加载失败，请检查后端推荐服务'
+  return '暂无可展示资源'
 })
 
-// 2. 核心计算属性：根据当前点击的 Tab，动态过滤要展示的卡片
-const filteredResources = computed(() => {
-  const aliases = {
-    '课程讲解文档': ['课程讲解文档', '课程文档', '文档'],
-    '知识点思维导图': ['知识点思维导图', '思维导图', '导图'],
-    '练习题集': ['练习题集', '练习题目', '练习题', '题库', '试卷'],
-    '拓展阅读包': ['拓展阅读包', '拓展阅读', '阅读材料'],
-    'PyTorch 实操案例': ['PyTorch 实操案例', '代码实验', '实操案例', '代码案例'],
-    'PPT 大纲': ['PPT 大纲', '课件大纲', 'PPT'],
-    '可导出 PPTX': ['可导出 PPTX', 'PPTX'],
-    '外部公开视频推荐卡': ['外部公开视频推荐卡', '视频推荐', '公开课', '公开视频'],
-    '个性化视频观看指南': ['个性化视频观看指南', '观看指南', '视频指南'],
-    '交互动画规格': ['交互动画规格', '交互动画', '动画规格', '可视化动画'],
-    '动画分镜': ['动画分镜', '分镜', '脚本'],
-    '课程实践项目任务书': ['课程实践项目任务书', '项目任务书', '实践任务', '项目案例'],
-    '主题学习包': ['主题学习包', '资源包', '学习包'],
-    '诊断与补弱报告': ['诊断与补弱报告', '错题诊断', '学习反馈', '诊断报告', '反馈报告']
-  }
-  const matchTypes = aliases[currentTab.value] || [currentTab.value]
-  const keyword = searchKeyword.value.trim().toLowerCase()
-
-  return sourceResources.value.filter(item => {
-    const itemType = item.type || ''
-    const typeMatched = isRecommendTab.value || isBundleTab.value || currentTab.value === '全部'
-      ? true
-      : matchTypes.some(type => itemType.includes(type) || type.includes(itemType))
-
-    if (!typeMatched) return false
-
-    const searchableText = [
-      item.id,
-      item.title,
-      item.type,
-      item.summary,
-      item.source,
-      item.uploader,
-      item.content,
-      item.topic,
-      item.unit_id,
-      ...(item.unit_ids || []),
-      ...(item.items || []).flatMap(child => [child.title, child.type, child.summary])
-    ].join('\n').toLowerCase()
-
-    const keywordMatched = !keyword || searchableText.includes(keyword)
-    const queryUnitId = String(route.query.unit_id || '').toLowerCase()
-    const queryType = String(route.query.type || '').toLowerCase()
-    const queryArtifactId = String(route.query.artifact_id || '').toLowerCase()
-    const itemTypeText = String(item.type || '').toLowerCase()
-    const itemId = String(item.artifact_id || item.id || '').toLowerCase()
-    const queryMatched = (
-      (!queryUnitId || searchableText.includes(queryUnitId)) &&
-      (!queryType || itemTypeText.includes(queryType) || queryType.includes(itemTypeText)) &&
-      (!queryArtifactId || itemId === queryArtifactId)
-    )
-
-    return keywordMatched && queryMatched
-  })
+const selectedStructuredContent = computed(() => parseStructuredContent(selectedResource.value?.content))
+const selectedArtifactPayload = computed(() => {
+  const resource = selectedResource.value || {}
+  const structured = selectedStructuredContent.value
+  if (Array.isArray(structured)) return { ...resource, items: structured }
+  return { ...resource, ...(structured && typeof structured === 'object' ? structured : {}) }
 })
+const selectedMarkdownContent = computed(() => selectedResource.value?.content || '暂无正文内容')
 
-const handleTabClick = (tab) => {
-  currentTab.value = tab
+const typeText = (item = {}) => `${item.type || ''} ${item.content_format || ''}`.toLowerCase()
+const isVideoRecommendation = (item) => typeText(item).includes('视频推荐') || typeText(item).includes('video_recommendation')
+const isVideoGuide = (item) => typeText(item).includes('观看指南') || typeText(item).includes('personalized_video_guide')
+const isInteractiveAnimation = (item) => typeText(item).includes('交互动画') || typeText(item).includes('animation_spec')
+const isStoryboard = (item) => typeText(item).includes('动画分镜') || typeText(item).includes('animation_storyboard')
+const isCodeLab = (item) => typeText(item).includes('pytorch') || typeText(item).includes('代码实验') || typeText(item).includes('code_lab')
+const isExerciseSet = (item) => typeText(item).includes('练习题') || typeText(item).includes('exercise_set')
+const isPptArtifact = (item) => typeText(item).includes('ppt') || typeText(item).includes('pptx')
+
+const qualityLabel = (item = {}) => {
+  const review = item.teaching_quality_review || {}
+  if (review.passed || review.status === 'passed') return '已完成教学质量校验'
+  if (item.quality_level === 'curated') return '课程底座精选资源'
+  return '待教师复核'
 }
 
-const applyRouteQuery = async () => {
-  const type = String(route.query.type || '')
-  const unitId = String(route.query.unit_id || '')
-  const artifactId = String(route.query.artifact_id || '')
-  if (type) {
-    const matchedTab = tabs.value.find(tab => tab === type || type.includes(tab) || tab.includes(type))
-    currentTab.value = matchedTab || '全部'
-  } else if (unitId || artifactId) {
-    currentTab.value = '全部'
-  }
-  if (artifactId) {
-    await nextTick()
-    const item = [...rawResources.value, ...recommendedResources.value]
-      .find(resource => String(resource.artifact_id || resource.id || '') === artifactId)
-    if (item) handleView(item)
-  }
-}
-
-watch(
-  () => route.query,
-  () => applyRouteQuery(),
-  { deep: true }
-)
-
-//  3. 根据不同的资源类型，动态赋予你之前写好的高级渐变色封面样式
-const getCoverClass = (type) => {
-  if (type.includes('主题学习包') || type.includes('学习包')) return 'bundle-cover'
+const getCoverClass = (type = '') => {
   if (type.includes('导图')) return 'mindmap-cover'
   if (type.includes('文档')) return 'doc-cover'
   if (type.includes('诊断') || type.includes('反馈')) return 'feedback-cover'
@@ -543,56 +452,12 @@ const getCoverClass = (type) => {
   return 'generic-cover'
 }
 
-//  4. 前台贡献上传资源逻辑
-const uploadVisible = ref(false)
-const uploadForm = ref({ title: '', type: '' })
-const detailVisible = ref(false)
-const selectedResource = ref(null)
-const selectedStructuredContent = computed(() => parseStructuredContent(selectedResource.value?.content))
-const selectedArtifactPayload = computed(() => {
-  const resource = selectedResource.value || {}
-  const structured = selectedStructuredContent.value
-  if (Array.isArray(structured)) {
-    return {
-      ...resource,
-      items: structured,
-      content: resource.content || ''
-    }
-  }
-  return {
-    ...resource,
-    ...(structured && typeof structured === 'object' ? structured : {})
-  }
-})
-const selectedMarkdownContent = computed(() => selectedResource.value?.content || '暂无正文内容')
-const selectedTeachingReview = computed(() => {
-  const review = selectedResource.value?.teaching_quality_review || {}
-  const score = review.teaching_quality_score ?? review.score
-  if (!(score || score === 0)) return {}
-  return {
-    scoreLabel: `${score} 分`,
-    statusLabel: review.passed || review.status === 'passed' ? '已通过' : '待教师复核'
-  }
-})
-const selectedEvidenceReview = computed(() => {
-  const review = selectedResource.value?.evidence_review || {}
-  const refs = review.evidence_refs || selectedResource.value?.evidence_refs || []
-  const count = review.evidence_count ?? refs.length
-  if (!count) return {}
-  return {
-    label: `已绑定 ${count} 条 evidence`,
-    refs: refs.slice(0, 3).join('、')
-  }
-})
-
-const typeText = (item = {}) => `${item.type || ''} ${item.content_format || ''}`.toLowerCase()
-const isVideoRecommendation = (item) => typeText(item).includes('视频推荐') || typeText(item).includes('video_recommendation')
-const isVideoGuide = (item) => typeText(item).includes('观看指南') || typeText(item).includes('personalized_video_guide')
-const isInteractiveAnimation = (item) => typeText(item).includes('交互动画') || typeText(item).includes('animation_spec')
-const isStoryboard = (item) => typeText(item).includes('动画分镜') || typeText(item).includes('animation_storyboard')
-const isCodeLab = (item) => typeText(item).includes('pytorch') || typeText(item).includes('代码实验') || typeText(item).includes('code_lab')
-const isExerciseSet = (item) => typeText(item).includes('练习题') || typeText(item).includes('exercise_set')
-const isPptArtifact = (item) => typeText(item).includes('ppt') || typeText(item).includes('pptx')
+const handleView = (item) => {
+  if (!item) return
+  const targetId = item.id || item.resource_id || item.artifact_id
+  selectedResource.value = rawResources.value.find(resource => resource.id === targetId || resource.artifact_id === targetId) || item
+  detailVisible.value = true
+}
 
 const openUploadDialog = () => {
   uploadForm.value = { title: '', type: '', summary: '', source: '', content: '' }
@@ -604,27 +469,51 @@ const submitUpload = async () => {
     return ElMessage.warning('请将资源名称和类型填写完整')
   }
   try {
-    const res = await uploadResourceAPI({
-      ...uploadForm.value,
-      username: userStore.username
-    })
-    if (res && res.code === 200) {
-      ElMessage.success('上传成功！已送往管理后台进行合规性审核，通过后会自动在此展现。')
+    const res = await uploadResourceAPI({ ...uploadForm.value, username: userStore.username })
+    if (res?.code === 200) {
+      ElMessage.success('上传成功，资源将进入教师审核流程。')
       uploadVisible.value = false
-      // 注意：这里不需要调 fetchPassedResources()，因为刚上传的是“待审核”，前台不能直接展示
     }
   } catch (error) {
     console.error('上传失败:', error)
   }
 }
 
+const handleProposeNewType = () => {
+  typeApplyForm.value = { name: '', reason: '' }
+  typeApplyVisible.value = true
+}
 
-// 点击查看按钮
-const handleView = (item) => {
-  selectedResource.value = item.auto_bundle
-    ? item
-    : rawResources.value.find(resource => resource.id === item.id) || recommendedResources.value.find(resource => resource.id === item.id) || item
-  detailVisible.value = true
+const submitNewTypeApplication = async () => {
+  const newTypeName = typeApplyForm.value.name.trim()
+  if (!newTypeName) return ElMessage.warning('请填写资源分类名称')
+  typeApplyLoading.value = true
+  try {
+    const res = await proposeTypeAPI(newTypeName, userStore.username, typeApplyForm.value.reason.trim())
+    if (res?.code === 200) {
+      ElMessage.success('申请已提交后台。')
+      typeApplyVisible.value = false
+    }
+  } catch (error) {
+    console.error('申请新分类失败:', error)
+  } finally {
+    typeApplyLoading.value = false
+  }
+}
+
+const applyRouteQuery = async () => {
+  const artifactId = String(route.query.artifact_id || '')
+  const chapterId = String(route.query.chapter_id || '')
+  if (chapterId) {
+    currentMode.value = '章节学习中心'
+    selectedChapterId.value = chapterId
+  }
+  if (artifactId) {
+    currentMode.value = '全部资源'
+    await nextTick()
+    const item = rawResources.value.find(resource => String(resource.artifact_id || resource.id || '') === artifactId)
+    if (item) handleView(item)
+  }
 }
 
 const downloadPptx = (item) => {
@@ -635,303 +524,257 @@ const downloadPptx = (item) => {
   if (!item?.id) return
   window.open(`/api/resource/export/pptx/${encodeURIComponent(item.id)}`, '_blank')
 }
+
+onMounted(async () => {
+  await fetchData()
+  await applyRouteQuery()
+})
+
+watch(
+  () => route.query,
+  () => applyRouteQuery(),
+  { deep: true }
+)
 </script>
 
 <style scoped>
 .resource-page {
-  padding: 24px;
-  height: 100%;
-  background-color: #f7f8fa;
+  padding: 20px;
+  min-height: 100%;
+  background: #f7f8fa;
   box-sizing: border-box;
   overflow-y: auto;
 }
-
-/* 顶部过滤栏 */
-.filter-header {
+.resource-topbar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 18px;
 }
-.page-title {
+.course-label {
+  display: inline-block;
+  color: #2563eb;
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.resource-topbar h1 {
   margin: 0;
-  font-size: 20px;
-  color: #333;
+  font-size: 26px;
+  color: #111827;
+  line-height: 1.25;
 }
-.category-tabs {
+.mode-tabs {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.tab {
-  padding: 6px 16px;
-  border-radius: 20px;
+.mode-tabs button {
+  border: 1px solid #e5e7eb;
   background: #fff;
-  color: #666;
-  font-size: 14px;
+  color: #4b5563;
+  border-radius: 999px;
+  padding: 8px 16px;
   cursor: pointer;
-  border: 1px solid #e5e5e5;
-  transition: all 0.2s;
-  user-select: none;
 }
-.tab:hover {
-  border-color: #1890ff;
-  color: #1890ff;
-}
-.tab.active {
+.mode-tabs button.active {
   background: #1890ff;
   color: #fff;
   border-color: #1890ff;
 }
-
 .resource-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.search-box {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(260px, 520px) auto 1fr;
   align-items: center;
-  gap: 12px;
-  min-width: 0;
-  flex: 1;
-  max-width: 600px;
+  gap: 14px;
+  margin-bottom: 18px;
 }
-
-.search-box :deep(.el-input) {
-  max-width: 420px;
-}
-
 .result-count {
-  flex-shrink: 0;
   color: #6b7280;
   font-size: 13px;
+  white-space: nowrap;
 }
-
 .upload-action-bar {
   display: flex;
   gap: 10px;
-  flex-wrap: wrap;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
-
-/* 网格布局：自适应列数 */
+.chapter-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 260px;
+  gap: 16px;
+  align-items: start;
+}
+.chapter-main {
+  min-width: 0;
+}
+.chapter-aside {
+  display: grid;
+  gap: 12px;
+}
+.aside-card {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px;
+}
+.aside-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #111827;
+}
+.aside-card p {
+  color: #4b5563;
+  line-height: 1.7;
+  margin: 0;
+}
+.aside-card button {
+  border: 0;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1677ff;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.45;
+}
+.search-results {
+  display: grid;
+  gap: 16px;
+}
+.search-results h2 {
+  margin: 0;
+  color: #111827;
+}
+.search-group {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 8px;
+}
+.search-group h3 {
+  margin: 0 0 4px;
+  color: #111827;
+}
 .resource-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
 }
-
-/* 卡片样式 */
 .resource-card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
-.resource-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-}
-.bundle-card {
-  border: 1px solid #dbeafe;
-}
-
-/* 卡片封面 */
 .card-cover {
-  height: 140px;
+  min-height: 92px;
   padding: 12px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
 }
-/* 唯美渐变色 */
+.tag {
+  display: inline-flex;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+}
 .mindmap-cover { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); }
 .doc-cover { background: linear-gradient(135deg, #ffd194 0%, #70e1f5 100%); }
 .feedback-cover { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); }
 .practice-cover { background: linear-gradient(135deg, #fddb92 0%, #d1fdff 100%); }
 .video-cover { background: linear-gradient(135deg, #fecdd3 0%, #bae6fd 100%); }
 .animation-cover { background: linear-gradient(135deg, #ddd6fe 0%, #bbf7d0 100%); }
-.ppt-cover { background: linear-gradient(135deg, #fde68a 0%, #c7d2fe 100%); }
-.bundle-cover { background: linear-gradient(135deg, #bfdbfe 0%, #bbf7d0 100%); }
-.generic-cover { background: linear-gradient(135deg, #dbeafe 0%, #e5e7eb 100%); }
-
-.tag {
-  background: rgba(255, 255, 255, 0.8);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #333;
-  font-weight: 500;
-}
-
-/* 卡片信息区 */
+.ppt-cover { background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }
+.generic-cover { background: linear-gradient(135deg, #e5e7eb 0%, #f9fafb 100%); }
 .card-info {
   padding: 16px;
-}
-.card-info h3 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  color: #333;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.desc {
-  margin: 0 0 16px 0;
-  font-size: 13px;
-  color: #999;
-}
-.bundle-type-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 14px;
-}
-.bundle-type-row span {
-  padding: 3px 7px;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #2563eb;
-  font-size: 12px;
-}
-
-.action-bar {
-  display: flex;
-  justify-content: flex-end;
-}
-.view-btn {
-  padding: 6px 16px;
-  border-radius: 6px;
-  background: #f0f7ff;
-  color: #1890ff;
-  border: none;
-  cursor: pointer;
-  font-weight: 500;
-}
-.view-btn:hover {
-  background: #1890ff;
-  color: #fff;
-}
-.resource-detail h3 { margin: 0 0 12px; color: #1f2937; }
-.detail-meta { display: flex; align-items: center; gap: 10px; color: #6b7280; margin-bottom: 14px; }
-.summary { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; color: #374151; line-height: 1.7; }
-.safety-note {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin: 12px 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  color: #166534;
-  font-size: 12px;
-}
-.safety-note em {
-  color: #4b5563;
-  font-style: normal;
-}
-.quality-note,
-.evidence-note {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin: 12px 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-.quality-note {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
-}
-.evidence-note {
-  background: #faf5ff;
-  border: 1px solid #e9d5ff;
-  color: #7e22ce;
-}
-.quality-note em,
-.evidence-note em {
-  color: #4b5563;
-  font-style: normal;
-}
-.artifact-detail-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-}
-.bundle-detail-list {
   display: grid;
   gap: 10px;
-  margin-top: 14px;
 }
-.bundle-detail-item {
-  display: grid;
-  grid-template-columns: 138px minmax(0, 1fr);
-  gap: 6px 12px;
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #e5e7eb;
+.artifact-title,
+.card-info h3,
+.resource-detail h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  display: block;
+  max-height: none;
+  word-break: break-word;
+}
+.card-info p {
+  color: #4b5563;
+  line-height: 1.6;
+  margin: 0;
+}
+.student-meta,
+.detail-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.student-meta span,
+.detail-meta span {
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.view-btn {
+  justify-self: start;
+  border: 0;
   border-radius: 8px;
-  background: #fff;
-  color: #1f2937;
-  text-align: left;
+  padding: 9px 14px;
+  background: #1890ff;
+  color: #fff;
   cursor: pointer;
 }
-.bundle-detail-item:hover {
-  border-color: #93c5fd;
-  background: #f8fbff;
+.resource-detail {
+  display: grid;
+  gap: 12px;
 }
-.bundle-detail-item span {
-  grid-row: span 2;
-  align-self: start;
-  color: #2563eb;
-  font-size: 12px;
-  font-weight: 700;
+.summary {
+  color: #4b5563;
+  line-height: 1.7;
+  margin: 0;
 }
-.bundle-detail-item strong {
-  min-width: 0;
-  font-size: 14px;
+.artifact-detail-panel {
+  border-top: 1px solid #f0f0f0;
+  padding-top: 14px;
 }
-.bundle-detail-item em {
-  color: #6b7280;
-  font-size: 12px;
-  font-style: normal;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (max-width: 900px) {
-  .filter-header,
-  .resource-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+@media (max-width: 1100px) {
+  .chapter-layout {
+    grid-template-columns: 1fr;
   }
-
-  .category-tabs,
-  .upload-action-bar {
+  .chapter-aside {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .resource-topbar,
+  .resource-toolbar {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+  .upload-action-bar,
+  .mode-tabs {
     justify-content: flex-start;
   }
-
-  .search-box {
-    max-width: none;
-    flex-wrap: wrap;
+  .chapter-aside {
+    grid-template-columns: 1fr;
   }
-
-  .search-box :deep(.el-input) {
-    max-width: none;
-  }
-
 }
 </style>
