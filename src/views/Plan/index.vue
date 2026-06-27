@@ -80,15 +80,25 @@
                   <p class="step-desc">{{ step.desc }}</p>
                   
                   <div class="linked-resources" v-if="step.resources && step.resources.length">
-                    <button
+                    <template
                       v-for="res in step.resources"
                       :key="res.id"
-                      type="button"
-                      class="res-tag res-link"
-                      @click.stop="openStepResource(res, step)"
                     >
-                      🔗 {{ res.title }}
-                    </button>
+                      <button
+                        v-if="isLinkedResource(res)"
+                        type="button"
+                        class="res-tag res-link"
+                        @click.stop="openStepResource(res, step)"
+                      >
+                        🔗 {{ res.title }}
+                      </button>
+                      <span
+                        v-else
+                        class="res-tag res-static"
+                      >
+                        {{ res.title }}
+                      </span>
+                    </template>
                   </div>
 
                   <div class="insert-trigger-zone">
@@ -217,20 +227,30 @@ const normalizeStepResources = (resources = [], step = {}) => {
         query: {}
       }
     }
+    const query = res.query || {}
+    const artifactId = query.artifact_id || res.artifact_id || ''
+    const resourceId = query.resource_id || res.resource_id || ''
+    const route = artifactId ? (res.route || '/resource') : ''
     return {
       id: res.id || res.resource_id || res.artifact_id || `${step.id || 'step'}_res_${index}`,
       title: res.title || res.name || '学习资源',
       type: res.type || 'resource',
       unit_id: res.unit_id || step.unit_id || '',
-      route: res.route || '/resource',
-      query: res.query || {
-        artifact_id: res.artifact_id || res.id || '',
+      route,
+      artifact_id: artifactId,
+      resource_id: resourceId,
+      query: {
+        ...query,
+        artifact_id: artifactId,
+        resource_id: resourceId,
         unit_id: res.unit_id || step.unit_id || '',
         type: res.type || ''
       }
     }
   })
 }
+
+const isLinkedResource = (res = {}) => Boolean(res.route && res.query?.artifact_id)
 
 const normalizePlan = (plan = {}) => {
   const normalized = {
@@ -601,6 +621,14 @@ const saveRouteEditor = async (draft) => {
   padding: 4px 10px;
 }
 .res-link:hover { background: #dbeafe; }
+.res-static {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
 
 /* 🌟 插针区域：隐藏在两个任务之间，鼠标悬浮时高亮显示 */
 .insert-trigger-zone {

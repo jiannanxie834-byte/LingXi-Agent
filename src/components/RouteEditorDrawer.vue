@@ -95,18 +95,28 @@ const visible = computed({
 
 const clone = value => JSON.parse(JSON.stringify(value || null))
 
-const normalizeResource = (resource = {}, task = {}, index = 0) => ({
-  id: resource.id || resource.artifact_id || `res_${Date.now()}_${index}`,
-  title: resource.title || '学习资源',
-  type: resource.type || '',
-  unit_id: resource.unit_id || task.unit_id || '',
-  route: resource.route || '/resource',
-  query: resource.query || {
-    artifact_id: resource.artifact_id || resource.id || '',
+const normalizeResource = (resource = {}, task = {}, index = 0) => {
+  const query = resource.query || {}
+  const artifactId = query.artifact_id || resource.artifact_id || ''
+  const resourceId = query.resource_id || resource.resource_id || ''
+  const route = artifactId ? (resource.route || '/resource') : ''
+  return {
+    id: resource.id || resource.artifact_id || resource.resource_id || `res_${Date.now()}_${index}`,
+    artifact_id: artifactId,
+    resource_id: resourceId,
+    title: resource.title || '学习资源',
+    type: resource.type || '',
     unit_id: resource.unit_id || task.unit_id || '',
-    type: resource.type || ''
+    route,
+    query: {
+      ...query,
+      artifact_id: artifactId,
+      resource_id: resourceId,
+      unit_id: resource.unit_id || task.unit_id || '',
+      type: resource.type || ''
+    }
   }
-})
+}
 
 const normalizeDraft = (plan) => {
   const next = clone(plan)
