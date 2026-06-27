@@ -175,6 +175,16 @@
           <strong>{{ selectedResource.safety_review.risk_level }}</strong>
           <em>{{ selectedResource.safety_review.score }}分，已进入管理员审核链路</em>
         </div>
+        <div v-if="selectedTeachingReview.scoreLabel" class="quality-note">
+          <span>教学质量</span>
+          <strong>{{ selectedTeachingReview.scoreLabel }}</strong>
+          <em>{{ selectedTeachingReview.statusLabel }}</em>
+        </div>
+        <div v-if="selectedEvidenceReview.label" class="evidence-note">
+          <span>证据完整性</span>
+          <strong>{{ selectedEvidenceReview.label }}</strong>
+          <em>{{ selectedEvidenceReview.refs }}</em>
+        </div>
         <div class="artifact-detail-panel">
           <VideoRecommendationCard
             v-if="isVideoRecommendation(selectedResource)"
@@ -545,6 +555,25 @@ const selectedArtifactPayload = computed(() => {
   }
 })
 const selectedMarkdownContent = computed(() => selectedResource.value?.content || '暂无正文内容')
+const selectedTeachingReview = computed(() => {
+  const review = selectedResource.value?.teaching_quality_review || {}
+  const score = review.teaching_quality_score ?? review.score
+  if (!(score || score === 0)) return {}
+  return {
+    scoreLabel: `${score} 分`,
+    statusLabel: review.passed || review.status === 'passed' ? '已通过' : '待教师复核'
+  }
+})
+const selectedEvidenceReview = computed(() => {
+  const review = selectedResource.value?.evidence_review || {}
+  const refs = review.evidence_refs || selectedResource.value?.evidence_refs || []
+  const count = review.evidence_count ?? refs.length
+  if (!count) return {}
+  return {
+    label: `已绑定 ${count} 条 evidence`,
+    refs: refs.slice(0, 3).join('、')
+  }
+})
 
 const typeText = (item = {}) => `${item.type || ''} ${item.content_format || ''}`.toLowerCase()
 const isVideoRecommendation = (item) => typeText(item).includes('视频推荐') || typeText(item).includes('video_recommendation')
@@ -797,6 +826,32 @@ const downloadPptx = (item) => {
   font-size: 12px;
 }
 .safety-note em {
+  color: #4b5563;
+  font-style: normal;
+}
+.quality-note,
+.evidence-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.quality-note {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+.evidence-note {
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  color: #7e22ce;
+}
+.quality-note em,
+.evidence-note em {
   color: #4b5563;
   font-style: normal;
 }

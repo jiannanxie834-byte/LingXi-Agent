@@ -4,6 +4,7 @@
     <ConvolutionAnimation v-if="type === 'cnn_convolution'" :spec="spec" />
     <BackpropagationAnimation v-else-if="type === 'backpropagation_flow'" :spec="spec" />
     <AttentionAnimation v-else-if="type === 'attention_flow'" :spec="spec" />
+    <LSTMGateAnimation v-else-if="type === 'lstm_gate_flow'" :spec="spec" />
     <pre v-else>{{ spec }}</pre>
   </div>
 </template>
@@ -13,6 +14,7 @@ import { computed } from 'vue'
 import ConvolutionAnimation from './ConvolutionAnimation.vue'
 import BackpropagationAnimation from './BackpropagationAnimation.vue'
 import AttentionAnimation from './AttentionAnimation.vue'
+import LSTMGateAnimation from './LSTMGateAnimation.vue'
 
 const props = defineProps({ artifact: { type: Object, default: () => ({}) } })
 const spec = computed(() => props.artifact.spec || props.artifact.content?.spec || props.artifact)
