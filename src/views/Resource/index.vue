@@ -25,7 +25,7 @@
           placeholder="搜索知识点、资源名称、来源或正文内容"
         />
         <span class="result-count">
-          已筛选 {{ filteredResources.length }} / {{ sourceResourceCount }} 份
+          {{ resultCountText }}
         </span>
       </div>
       <div class="upload-action-bar">
@@ -252,6 +252,7 @@ import { useUserStore } from '@/stores/user'
 const loading = ref(false)
 const userStore = useUserStore()
 const route = useRoute()
+const RECOMMENDATION_LIMIT = 80
 const rawResources = ref([]) // 从后端拿到的全量“已通过”资源
 const recommendedResources = ref([])
 const resourceBundles = ref([])
@@ -356,7 +357,7 @@ const fetchTypesAndResources = async () => {
       resourceBundles.value = bundleRes.data || []
     }
 
-    const recommendRes = await getRecommendedResourcesAPI(userStore.username || 'student', 12)
+    const recommendRes = await getRecommendedResourcesAPI(userStore.username || 'student', RECOMMENDATION_LIMIT)
     if (recommendRes && recommendRes.code === 200) {
       recommendedResources.value = recommendRes.data || []
       recommendLoadFailed.value = false
@@ -425,6 +426,15 @@ const sourceResources = computed(() => {
 })
 
 const sourceResourceCount = computed(() => sourceResources.value.length)
+const resultCountText = computed(() => {
+  if (isRecommendTab.value) {
+    return `已筛选 ${filteredResources.value.length} / 推荐 ${recommendedResources.value.length} 份 · 资源库共 ${rawResources.value.length} 份`
+  }
+  if (isBundleTab.value) {
+    return `已筛选 ${filteredResources.value.length} / 学习包 ${resourceBundles.value.length} 个`
+  }
+  return `已筛选 ${filteredResources.value.length} / ${sourceResourceCount.value} 份`
+})
 
 const emptyDescription = computed(() => {
   if (searchKeyword.value) return '没有匹配到资源，换个关键词试试'

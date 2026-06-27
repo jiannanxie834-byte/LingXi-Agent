@@ -47,3 +47,11 @@ export function updateProfileAPI(data) {
     data
   })
 }
+
+export function getMyProfileAPI(username) {
+  return request({
+    url: '/profile/me',
+    method: 'get',
+    params: { username }
+  })
+}

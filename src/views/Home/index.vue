@@ -461,6 +461,9 @@ const sendMessage = async () => {
 
     if (profile) {
       userStore.updateLearningProfile(profile)
+      window.dispatchEvent(new CustomEvent('lingxi-profile-updated', {
+        detail: profile
+      }))
     }
 
   } catch (error) {

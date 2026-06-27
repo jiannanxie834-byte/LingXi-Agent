@@ -11,7 +11,7 @@ export const getResourceArtifactAPI = (artifactId) => request({
   url: `/resource/artifacts/${artifactId}`,
   method: 'get'
 })
-export const getRecommendedResourcesAPI = (username, limit = 12) => request({
+export const getRecommendedResourcesAPI = (username, limit = 80) => request({
   url: '/resource/recommendations',
   method: 'get',
   params: { username, limit }

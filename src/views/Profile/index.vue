@@ -225,18 +225,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import * as echarts from 'echarts' 
-import { submitFeedbackAPI, updateProfileAPI } from '@/api/user'
+import { getMyProfileAPI, submitFeedbackAPI, updateProfileAPI } from '@/api/user'
 
 const router = useRouter()
 const userStore = useUserStore()
 
 const loading = ref(false)
 const avatarSaving = ref(false)
+let resizeHandler = null
 const MAX_AVATAR_FILE_SIZE = 3 * 1024 * 1024
 const AVATAR_OUTPUT_SIZE = 320
 
@@ -440,6 +441,27 @@ const profileAdvice = computed(() => {
   }
 })
 
+const applyProfileSnapshot = (profile) => {
+  if (profile && (profile.dimensions || profile.radar || profile.knowledge_tags || profile.tags)) {
+    userStore.updateLearningProfile(profile)
+  }
+}
+
+const refreshLearningProfile = async () => {
+  if (!userStore.username) return
+  try {
+    const res = await getMyProfileAPI(userStore.username)
+    applyProfileSnapshot(res?.data?.profile)
+  } catch (error) {
+    console.error('画像刷新失败:', error)
+  }
+}
+
+const handleLearningProfileUpdated = (event) => {
+  applyProfileSnapshot(event?.detail)
+  nextTick(() => initRadarChart())
+}
+
 const padTime = (value) => String(value).padStart(2, '0')
 
 const profileUpdateText = computed(() => {
@@ -600,9 +622,19 @@ const initRadarChart = () => {
   myChart.setOption(option)
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await refreshLearningProfile()
   initRadarChart()
-  window.addEventListener('resize', () => myChart && myChart.resize())
+  resizeHandler = () => myChart && myChart.resize()
+  window.addEventListener('resize', resizeHandler)
+  window.addEventListener('lingxi-profile-updated', handleLearningProfileUpdated)
+})
+
+onUnmounted(() => {
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+  }
+  window.removeEventListener('lingxi-profile-updated', handleLearningProfileUpdated)
 })
 
 watch([radarValues, hasProfileData], () => {
