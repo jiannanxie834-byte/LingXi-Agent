@@ -120,7 +120,7 @@ const statusText = computed(() => {
   if (props.message.isPending) return '正在整理学习建议'
   if (!canShowLearningStatus.value) return ''
   if ((props.message.cards || []).some(card => card.type === 'resource_review')) {
-    return '学习建议已生成，配套资源正在教师审核'
+    return '学习建议已生成，配套资源任务已创建'
   }
   return props.message.content ? '学习建议已生成' : ''
 })
@@ -152,21 +152,12 @@ const productCards = computed(() => {
     if (card.type === 'resource_review') {
       result.push({
         id: `resource-pending-${index}-${card.title}`,
-        title: card.title || '配套资源正在教师审核',
+        title: card.title || '配套资源任务已创建',
         badge: statusLabel(card.status || 'pending_review'),
-        summary: card.summary || '配套 Artifact 已生成，正在进行教师审核。审核通过后会进入资源工厂。',
-        actionText: card.action_text || '审核通过后查看资源工厂',
-        actionRoute: card.action_route || '/resource',
+        summary: card.summary || '系统会基于课程资源库依据和你的学习画像生成个性化学习包，完成后通过系统消息通知。',
+        actionText: '',
+        actionRoute: '',
         items: (card.items || []).slice(0, 6)
-      })
-      result.push({
-        id: `resource-review-${index}-${card.title}`,
-        title: '审核通过后进入资源工厂',
-        badge: '待发布',
-        summary: '当前只展示标题、类型和摘要。完整正文会在教师审核通过后开放。',
-        actionText: card.action_text || '审核通过后查看资源工厂',
-        actionRoute: card.action_route || '/resource',
-        items: []
       })
       return
     }

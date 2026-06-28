@@ -64,7 +64,7 @@
             <h2>以章节级基础资源和条目级索引支撑后续个性化生成</h2>
             <p>
               初始资源库保存课程结构、章节资源入口、题库、代码任务、视频条目、evidence 和 policy。
-              学生后续提出学习需求时，系统会先命中 section_id / unit_id，再结合画像生成 ResourceArtifact。
+              学生后续提出学习需求时，系统会先定位课程主题，再结合画像生成新的个性化学习资源。
             </p>
           </div>
           <div class="chapter-grid">
@@ -328,7 +328,6 @@ const formatList = (value) => {
   if (value === null || value === undefined || value === '') return '暂无'
   return String(value)
 }
-
 const selectCourse = () => {
   selectedType.value = 'course'
   selectedChapterId.value = ''
@@ -455,7 +454,9 @@ const fetchFramework = async () => {
   }
 }
 
-onMounted(fetchFramework)
+onMounted(() => {
+  fetchFramework()
+})
 </script>
 
 <style scoped>
