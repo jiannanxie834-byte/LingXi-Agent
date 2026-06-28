@@ -219,11 +219,20 @@
               >
                 <div class="item-head">
                   <strong>{{ video.title }}</strong>
-                  <span>{{ video.status === 'pending_curation' ? '待补充公开链接' : video.platform }}</span>
+                  <span>{{ video.platform || '视频资源' }}</span>
                 </div>
                 <p>观看重点：{{ formatList(video.watch_focus) }}</p>
                 <p>观看前：{{ formatList(video.before_watch) }}</p>
                 <p>观看后任务：{{ formatList(video.after_watch_tasks) }}</p>
+                <a
+                  v-if="video.source_url"
+                  class="video-link"
+                  :href="video.source_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  打开视频
+                </a>
               </article>
             </div>
           </section>
@@ -760,6 +769,19 @@ onMounted(fetchFramework)
   cursor: pointer;
   color: #1677ff;
   font-weight: 700;
+}
+.video-link {
+  justify-self: start;
+  color: #1677ff;
+  background: #eff6ff;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.video-link:hover {
+  background: #dbeafe;
 }
 .answer-block {
   margin-top: 8px;
