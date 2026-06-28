@@ -4,7 +4,6 @@
       <strong>{{ item.title }}</strong>
       <span>{{ item.platform || item.source || '公开视频' }}</span>
     </div>
-    <p v-if="item.personalization_reason">{{ item.personalization_reason }}</p>
     <div class="segments" v-if="segments.length">
       <span v-for="seg in segments" :key="`${seg.start}-${seg.end}`">
         {{ seg.start }}-{{ seg.end }} · {{ seg.reason || seg.focus }}

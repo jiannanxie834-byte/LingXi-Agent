@@ -17,3 +17,9 @@ export const getEvaluationHistoryAPI = (username) => request({
   method: 'get',
   params: { username }
 })
+
+export const generateRemediationPackageAPI = (data) => request({
+  url: '/evaluation/remediation-package',
+  method: 'post',
+  data
+})

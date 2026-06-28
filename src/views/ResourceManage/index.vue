@@ -40,17 +40,6 @@
           :name="tab.name"
         />
       </el-tabs>
-      <div class="governance-filter-bar">
-        <button
-          v-for="filter in governanceFilters"
-          :key="filter.value"
-          type="button"
-          :class="{ active: activeGovernanceFilter === filter.value }"
-          @click="activeGovernanceFilter = filter.value"
-        >
-          {{ filter.label }}
-        </button>
-      </div>
       <el-table :data="currentResourceList" row-key="id" border stripe class="resource-table">
         <el-table-column label="资源信息" min-width="260">
           <template #default="scope">
@@ -59,31 +48,7 @@
                 {{ scope.row.title || '未命名资源' }}
               </button>
               <div class="resource-meta-line">
-                <span>{{ scope.row.id }}</span>
                 <span>{{ scope.row.time || '暂无时间' }}</span>
-              </div>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="治理指标" min-width="230">
-          <template #default="scope">
-            <div class="governance-cell">
-              <div class="chapter-line">{{ chapterLabel(scope.row) }}</div>
-              <div class="governance-chip-line">
-                <span class="governance-chip">{{ plainTextLength(scope.row.content) }} 字</span>
-                <span v-if="questionCount(scope.row.content)" class="governance-chip">{{ questionCount(scope.row.content) }} 题</span>
-                <span class="governance-chip" :class="{ strong: scope.row.is_chapter_primary }">
-                  {{ scope.row.is_chapter_primary ? '章节主资源' : '配套资源' }}
-                </span>
-                <span class="governance-chip" :class="{ strong: isStudentVisible(scope.row), muted: !isStudentVisible(scope.row) }">
-                  {{ isStudentVisible(scope.row) ? '学生端可见' : '学生端隐藏' }}
-                </span>
-              </div>
-              <div v-if="isArchivedStatus(scope.row.status)" class="archive-line">
-                {{ archiveStatusText(scope.row.status) }}
-              </div>
-              <div v-else-if="isLowQuality(scope.row)" class="archive-line warning">
-                低质量风险：建议合并或重写
               </div>
             </div>
           </template>
@@ -93,26 +58,17 @@
             <el-tag effect="plain" class="type-tag">{{ scope.row.type }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="来源与摘要" min-width="220">
+        <el-table-column label="申请人" width="120" align="center">
+          <template #default="scope">
+            {{ scope.row.applicant_username || scope.row.uploader || 'system' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="摘要" min-width="220">
           <template #default="scope">
             <div class="source-cell">
-              <div class="source-name">{{ scope.row.uploader || 'system' }}</div>
               <div class="source-summary">{{ scope.row.summary || scope.row.source || '暂无摘要' }}</div>
               <div v-if="scope.row.review_comment" class="review-comment-line">
                 审核意见：{{ scope.row.review_comment }}
-              </div>
-              <div v-if="isDeprecatedStandaloneType(scope.row.type)" class="deprecated-resource-line">
-                已停用为独立资源类型，建议改由主题学习包聚合展示
-              </div>
-              <div v-if="scope.row.safety_review && scope.row.safety_review.risk_level" class="review-chip-line">
-                <span class="review-chip" :class="riskClass(scope.row.safety_review.risk_level)">
-                  内容安全 {{ scope.row.safety_review.risk_level }} · {{ scope.row.safety_review.score }}分
-                </span>
-              </div>
-              <div class="review-chip-line">
-                <span class="review-chip" :class="teachingQualityClass(scope.row.teaching_quality_review)">
-                  {{ teachingQualityText(scope.row.teaching_quality_review) }}
-                </span>
               </div>
             </div>
           </template>
@@ -248,80 +204,17 @@
           <span>{{ selectedResource.uploader || 'system' }}</span>
           <span>{{ selectedResource.time || '暂无时间' }}</span>
         </div>
-        <div class="governance-detail-panel">
-          <strong>资源治理信息</strong>
-          <div class="governance-detail-grid">
-            <span>章节：{{ chapterLabel(selectedResource) }}</span>
-            <span>正文长度：{{ plainTextLength(selectedResource.content) }} 字</span>
-            <span>题目数量：{{ questionCount(selectedResource.content) || 0 }} 题</span>
-            <span>章节主资源：{{ selectedResource.is_chapter_primary ? '是' : '否' }}</span>
-            <span>质量等级：{{ selectedResource.quality_level || '未标注' }}</span>
-            <span>学生端展示：{{ isStudentVisible(selectedResource) ? '可见' : '隐藏' }}</span>
-          </div>
-        </div>
         <p class="summary">{{ selectedResource.summary || '暂无摘要' }}</p>
-        <div v-if="shouldWarnTeachingQuality(selectedResource)" class="quality-warning-panel">
-          该资源教学内容不足，不建议通过审核。
-        </div>
-        <div v-if="isDeprecatedStandaloneType(selectedResource.type)" class="deprecated-resource-panel">
-          多模态能力已调整为主题学习包聚合视图，不再作为独立资源正文生成。新资源应使用课程讲解文档、练习题集、代码实验、视频推荐卡、算法可视化动画规格等 Artifact 类型。
-        </div>
         <div v-if="selectedResource.review_comment" class="detail-review-comment">
           <strong>管理员审核意见</strong>
           <p>{{ selectedResource.review_comment }}</p>
         </div>
-        <div class="source-line">知识来源：{{ selectedResource.source || '未标注' }}</div>
-        <div v-if="selectedResource.safety_review && selectedResource.safety_review.risk_level" class="safety-panel">
-          <div class="safety-head">
-            <span>内容安全与防幻觉自检</span>
-            <el-tag :type="riskTagType(selectedResource.safety_review.risk_level)">
-              {{ selectedResource.safety_review.risk_level }} · {{ selectedResource.safety_review.score }}分
-            </el-tag>
-          </div>
-          <div class="safety-grid">
-            <div>
-              <strong>自检项</strong>
-              <p v-for="item in selectedResource.safety_review.checks || []" :key="item">{{ item }}</p>
-            </div>
-            <div>
-              <strong>审核建议</strong>
-              <p v-for="item in selectedResource.safety_review.suggestions || []" :key="item">{{ item }}</p>
-            </div>
-          </div>
-        </div>
-        <div class="teaching-quality-panel">
-          <div class="safety-head">
-            <span>教学质量门控</span>
-            <el-tag :type="teachingQualityTagType(selectedResource.teaching_quality_review)">
-              {{ teachingQualityText(selectedResource.teaching_quality_review) }}
-            </el-tag>
-          </div>
-          <div v-if="selectedResource.teaching_quality_review && selectedResource.teaching_quality_review.score" class="safety-grid">
-            <div>
-              <strong>质量问题</strong>
-              <p
-                v-for="item in selectedResource.teaching_quality_review.issues || []"
-                :key="item"
-              >
-                {{ item }}
-              </p>
-              <p v-if="!(selectedResource.teaching_quality_review.issues || []).length">暂无明显教学质量问题</p>
-            </div>
-            <div>
-              <strong>修订建议</strong>
-              <p
-                v-for="item in selectedResource.teaching_quality_review.repair_suggestions || []"
-                :key="item"
-              >
-                {{ item }}
-              </p>
-              <p v-if="!(selectedResource.teaching_quality_review.repair_suggestions || []).length">建议管理员继续核验公式、代码和证据引用</p>
-            </div>
-          </div>
-          <p v-else class="quality-unreviewed">教学质量：未评估</p>
-        </div>
-        <div class="agent-notes">{{ selectedResource.agent_notes || '暂无智能体说明' }}</div>
         <MarkdownRenderer :content="selectedResource.content || '暂无正文内容'" />
+        <el-collapse class="debug-collapse">
+          <el-collapse-item title="调试信息（默认收起）" name="debug">
+            <pre>{{ debugText(selectedResource) }}</pre>
+          </el-collapse-item>
+        </el-collapse>
       </div>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
@@ -388,7 +281,6 @@ const resourceList = ref([])
 const typeList = ref([])
 const activeResourceStatus = ref('pending')
 const activeTypeStatus = ref('pending')
-const activeGovernanceFilter = ref('all')
 const detailVisible = ref(false)
 const selectedResource = ref(null)
 const resourceSectionRef = ref(null)
@@ -416,16 +308,6 @@ const normalizeStatusTab = (status) => {
 
 const ARCHIVE_STATUSES = ['archived_shallow', 'merged_into_chapter_pack', 'legacy_demo_only']
 
-const governanceFilters = [
-  { label: '全部治理状态', value: 'all' },
-  { label: '低质量风险', value: 'low_quality' },
-  { label: '待合并/归档', value: 'pending_merge' },
-  { label: '已归档', value: 'archived' },
-  { label: '缺失章节', value: 'missing_chapter' },
-  { label: '章节主资源', value: 'chapter_primary' },
-  { label: '学生端可见', value: 'student_visible' }
-]
-
 const statusListOf = (config) => config?.statuses || [config?.status].filter(Boolean)
 
 const resourcesByStatusConfig = (config) => {
@@ -447,7 +329,7 @@ const resourceStatusTabs = computed(() => {
 
 const currentResourceList = computed(() => {
   const config = resourceStatusMap[activeResourceStatus.value] || resourceStatusMap.pending
-  return resourcesByStatusConfig(config).filter(matchesGovernanceFilter)
+  return resourcesByStatusConfig(config)
 })
 
 const typesByStatus = (status) => {
@@ -466,6 +348,22 @@ const currentTypeList = computed(() => {
   const status = typeStatusMap[activeTypeStatus.value]?.status || '待审核'
   return typesByStatus(status)
 })
+
+const debugText = (resource = {}) => {
+  const debugInfo = {
+    resource_id: resource.id || resource.resource_id || '',
+    chapter: resource.chapter_title || resource.chapter_id || '',
+    content_length: plainTextLength(resource.content),
+    question_count: questionCount(resource.content) || 0,
+    safety_review: resource.safety_review || {},
+    teaching_quality_review: resource.teaching_quality_review || {},
+    evidence_review: resource.evidence_review || {},
+    source: resource.source || '',
+    agent_notes: resource.agent_notes || '',
+    agent_trace_id: resource.agent_trace_id || ''
+  }
+  return JSON.stringify(debugInfo, null, 2)
+}
 
 const riskTagType = (riskLevel) => {
   if (riskLevel === '高风险') return 'danger'
@@ -538,18 +436,6 @@ const isLowQuality = (resource = {}) => {
   if (resource.type === '课程讲解文档' && plainTextLength(resource.content) < 3000) return true
   if (resource.type === '练习题集' && questionCount(resource.content) < 8) return true
   return plainTextLength(resource.content) < 1200 && !['知识点思维导图', '算法可视化动画规格', '交互动画规格', '动画分镜'].includes(resource.type)
-}
-
-const matchesGovernanceFilter = (resource) => {
-  const filter = activeGovernanceFilter.value
-  if (filter === 'all') return true
-  if (filter === 'low_quality') return isLowQuality(resource)
-  if (filter === 'pending_merge') return isLowQuality(resource) || resource.status === 'merged_into_chapter_pack'
-  if (filter === 'archived') return isArchivedStatus(resource.status)
-  if (filter === 'missing_chapter') return !resource.chapter_id && !resource.chapter_title
-  if (filter === 'chapter_primary') return !!resource.is_chapter_primary
-  if (filter === 'student_visible') return isStudentVisible(resource)
-  return true
 }
 
 const shouldWarnTeachingQuality = (resource) => {

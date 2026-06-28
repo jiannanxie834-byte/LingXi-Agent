@@ -44,7 +44,7 @@
             <div v-if="card.items && card.items.length" class="card-items">
               <div v-for="item in card.items" :key="`${item.type}-${item.title}`" class="card-item">
                 <strong>{{ item.title }}</strong>
-                <span>{{ item.type }} · {{ item.status || '待审核' }}</span>
+                <span>{{ item.type || '学习资源' }}</span>
                 <em v-if="item.summary">{{ item.summary }}</em>
               </div>
             </div>
@@ -157,7 +157,7 @@ const productCards = computed(() => {
         summary: card.summary || '配套 Artifact 已生成，正在进行教师审核。审核通过后会进入资源工厂。',
         actionText: card.action_text || '审核通过后查看资源工厂',
         actionRoute: card.action_route || '/resource',
-        items: (card.items || []).slice(0, 4)
+        items: (card.items || []).slice(0, 6)
       })
       result.push({
         id: `resource-review-${index}-${card.title}`,
