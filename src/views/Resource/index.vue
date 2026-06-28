@@ -4,7 +4,7 @@
       <div>
         <span class="course-label">灵析学伴 · 数据结构与算法个性化学习系统</span>
         <h1>{{ courseTitle }}</h1>
-        <p>资源工厂展示课程树、章节基础资源、小节讲解、练习与代码任务索引。第 1 章已接入正式基础资源，其余章节会继续补充。</p>
+        <p>资源工厂展示课程树、章节基础资源、小节讲解、练习与代码任务索引。点击章节查看章节概述，点击小节查看对应 Markdown 正文。</p>
       </div>
       <div class="framework-summary">
         <strong>{{ chapterCount }}</strong>
@@ -49,7 +49,7 @@
               type="button"
               class="section-button"
               :class="{ active: selectedSectionId === section.section_id }"
-              @click="selectSection(chapter, section)"
+              @click.stop.prevent="selectSection(chapter, section)"
             >
               {{ section.title }}
             </button>
@@ -89,7 +89,27 @@
             <p>{{ displaySummary }}</p>
           </div>
 
-          <section v-if="selectedType === 'section' && selectedSectionContent" class="panel markdown-panel">
+          <section
+            v-if="selectedType === 'section' && sectionLoading"
+            ref="sectionContentPanel"
+            class="panel section-state-panel"
+          >
+            正在加载小节正文...
+          </section>
+
+          <section
+            v-else-if="selectedType === 'section' && sectionError"
+            ref="sectionContentPanel"
+            class="panel section-state-panel error"
+          >
+            {{ sectionError }}
+          </section>
+
+          <section
+            v-else-if="selectedType === 'section' && selectedSectionContent"
+            ref="sectionContentPanel"
+            class="panel markdown-panel"
+          >
             <MarkdownRenderer :content="selectedSectionContent" />
           </section>
 
@@ -102,10 +122,10 @@
                   :key="section.section_id"
                   type="button"
                   class="section-card"
-                  @click="selectSection(selectedChapter, section)"
+                  @click.stop.prevent="selectSection(selectedChapter, section)"
                 >
                   <strong>{{ section.title }}</strong>
-                  <span>{{ section.content ? '已接入小节讲解' : '内容建设中' }}</span>
+                  <span>点击查看小节正文</span>
                 </button>
               </div>
             </section>
@@ -113,7 +133,7 @@
             <section v-if="chapterOverviewContent" class="panel markdown-panel">
               <div class="resource-preview-title">
                 <span>章节概述</span>
-                <h3>第 1 章学习导引</h3>
+                <h3>{{ selectedChapter?.title }} 学习导引</h3>
               </div>
               <MarkdownRenderer :content="chapterOverviewContent" />
             </section>
@@ -121,7 +141,7 @@
             <section v-if="chapterMindMapContent" class="panel markdown-panel mind-map-panel">
               <div class="resource-preview-title">
                 <span>思维导图</span>
-                <h3>算法导论与复杂度分析结构图</h3>
+                <h3>{{ selectedChapter?.title }} 结构图</h3>
               </div>
               <MermaidBlock :code="chapterMindMapContent" />
             </section>
@@ -161,7 +181,7 @@
                     <b>解析：</b>{{ exercise.explanation }}
                     <template v-if="exercise.common_mistakes?.length">
                       <br>
-                      <b>常见错误：</b>{{ exercise.common_mistakes.join('；') }}
+                      <b>常见错误：</b>{{ formatList(exercise.common_mistakes) }}
                     </template>
                   </div>
                 </details>
@@ -201,9 +221,9 @@
                   <strong>{{ video.title }}</strong>
                   <span>{{ video.status === 'pending_curation' ? '待补充公开链接' : video.platform }}</span>
                 </div>
-                <p>观看重点：{{ (video.watch_focus || []).join('；') }}</p>
-                <p>观看前：{{ (video.before_watch || []).join('；') }}</p>
-                <p>观看后任务：{{ (video.after_watch_tasks || []).join('；') }}</p>
+                <p>观看重点：{{ formatList(video.watch_focus) }}</p>
+                <p>观看前：{{ formatList(video.before_watch) }}</p>
+                <p>观看后任务：{{ formatList(video.after_watch_tasks) }}</p>
               </article>
             </div>
           </section>
@@ -215,24 +235,41 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getDsaCourseFrameworkAPI } from '@/api/course'
+import {
+  getDsaChapterDetailAPI,
+  getDsaCourseTreeAPI,
+  getDsaSectionDetailAPI
+} from '@/api/resource'
 import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
 import MermaidBlock from '@/components/MermaidBlock.vue'
 
 const loading = ref(false)
+const chapterLoading = ref(false)
+const sectionLoading = ref(false)
 const framework = ref({})
+const selectedChapterDetail = ref(null)
+const selectedSectionDetail = ref(null)
+const selectedSectionStub = ref(null)
+const sectionError = ref('')
+const sectionContentPanel = ref(null)
 const selectedType = ref('course')
 const selectedChapterId = ref('')
 const selectedSectionId = ref('')
+let sectionRequestToken = 0
 
 const chapters = computed(() => framework.value?.chapters || [])
 const courseTitle = computed(() => framework.value?.course_title || '数据结构与算法：可视化理解与代码实践')
 const chapterCount = computed(() => chapters.value.length)
 const sectionCount = computed(() => chapters.value.reduce((sum, chapter) => sum + (chapter.sections || []).length, 0))
-const selectedChapter = computed(() => chapters.value.find(item => item.chapter_id === selectedChapterId.value) || chapters.value[0] || null)
+const selectedChapter = computed(() => {
+  if (selectedChapterDetail.value?.chapter_id === selectedChapterId.value) return selectedChapterDetail.value
+  return chapters.value.find(item => item.chapter_id === selectedChapterId.value) || chapters.value[0] || null
+})
 const selectedSection = computed(() => {
+  if (selectedSectionDetail.value?.section_id === selectedSectionId.value) return selectedSectionDetail.value
+  if (selectedSectionStub.value?.section_id === selectedSectionId.value) return selectedSectionStub.value
   if (!selectedChapter.value) return null
   return (selectedChapter.value.sections || []).find(item => item.section_id === selectedSectionId.value) || null
 })
@@ -241,47 +278,136 @@ const selectedMap = computed(() => {
   return selectedChapter.value.section_resource_map?.[selectedSectionId.value] || null
 })
 const selectedSectionUnitIds = computed(() => selectedSection.value?.unit_ids || selectedMap.value?.unit_ids || [])
-const selectedSectionContent = computed(() => selectedSection.value?.content || '')
+const selectedSectionContent = computed(() => selectedSectionDetail.value?.content || selectedSection.value?.content || '')
 const chapterResource = (path) => selectedChapter.value?.resource_contents?.[path]?.content || ''
-const chapterOverviewContent = computed(() => chapterResource('resources/chapter_overview.md'))
-const chapterMindMapContent = computed(() => chapterResource('resources/mind_map.mmd'))
-const chapterReadingGuideContent = computed(() => chapterResource('resources/reading_video_guide.md'))
+const chapterOverviewContent = computed(() => selectedChapter.value?.overview || chapterResource('resources/chapter_overview.md'))
+const chapterMindMapContent = computed(() => selectedChapter.value?.mind_map || chapterResource('resources/mind_map.mmd'))
+const chapterReadingGuideContent = computed(() => selectedChapter.value?.reading_video_guide || chapterResource('resources/reading_video_guide.md'))
 const selectedSectionIds = computed(() => selectedSection.value ? [selectedSection.value.section_id] : [])
-const chapterBanks = computed(() => selectedChapter.value?.banks || {})
+const chapterBanks = computed(() => selectedChapter.value?.resources || selectedChapter.value?.banks || {})
 const itemMatchesSection = (item = {}) => {
   const sectionIds = item.section_ids || []
   const unitIds = item.unit_ids || []
   return sectionIds.some(id => selectedSectionIds.value.includes(id))
     || unitIds.some(id => selectedSectionUnitIds.value.includes(id))
 }
-const sectionExercises = computed(() => (chapterBanks.value.exercises || []).filter(itemMatchesSection))
-const sectionCodeTasks = computed(() => (chapterBanks.value.code_tasks || []).filter(itemMatchesSection))
-const sectionVideoItems = computed(() => (chapterBanks.value.video_items || []).filter(itemMatchesSection))
+const sectionRelated = computed(() => selectedSectionDetail.value?.related || {})
+const sectionExercises = computed(() => sectionRelated.value.exercises || (chapterBanks.value.exercises || []).filter(itemMatchesSection))
+const sectionCodeTasks = computed(() => sectionRelated.value.code_tasks || (chapterBanks.value.code_tasks || []).filter(itemMatchesSection))
+const sectionVideoItems = computed(() => sectionRelated.value.video_items || (chapterBanks.value.video_items || []).filter(itemMatchesSection))
 const hasSectionLearningItems = computed(() => (
   sectionExercises.value.length
   || sectionCodeTasks.value.length
   || sectionVideoItems.value.length
 ))
 const shortChapterTitle = (title = '') => String(title).replace(/^第\s*\d+\s*章\s*/, '')
+const difficultyLabel = (difficulty = '') => {
+  const labels = {
+    basic: '基础',
+    medium: '中等',
+    hard: '进阶',
+    easy: '基础',
+    基础: '基础',
+    中等: '中等',
+    进阶: '进阶',
+    困难: '困难'
+  }
+  return labels[difficulty] || difficulty || '未标注'
+}
+const formatList = (value) => {
+  if (Array.isArray(value)) return value.filter(Boolean).join('；')
+  if (value === null || value === undefined || value === '') return '暂无'
+  return String(value)
+}
 
 const selectCourse = () => {
   selectedType.value = 'course'
   selectedChapterId.value = ''
   selectedSectionId.value = ''
+  selectedChapterDetail.value = null
+  selectedSectionDetail.value = null
+  selectedSectionStub.value = null
+  sectionError.value = ''
 }
 
-const selectChapter = (chapter) => {
+const selectChapter = async (chapter) => {
   if (!chapter) return
+  const chapterId = chapter.chapter_id || chapter.id
+  if (!chapterId) {
+    ElMessage.warning('章节参数缺失，无法打开内容')
+    return
+  }
   selectedType.value = 'chapter'
-  selectedChapterId.value = chapter.chapter_id
+  selectedChapterId.value = chapterId
   selectedSectionId.value = ''
+  selectedSectionDetail.value = null
+  selectedSectionStub.value = null
+  sectionError.value = ''
+  sectionRequestToken += 1
+  chapterLoading.value = true
+  try {
+    const res = await getDsaChapterDetailAPI(chapterId)
+    if (res?.code === 200) {
+      selectedChapterDetail.value = res.data
+    }
+  } catch (error) {
+    console.error('章节内容加载失败:', error)
+  } finally {
+    chapterLoading.value = false
+  }
 }
 
-const selectSection = (chapter, section) => {
-  if (!chapter || !section) return
+const selectSection = async (chapter, section) => {
+  const chapterId = chapter?.chapter_id || chapter?.id || selectedChapterId.value
+  const sectionId = section?.section_id || section?.id
+  if (!chapterId || !sectionId) {
+    ElMessage.warning('小节参数缺失，无法打开内容')
+    return
+  }
+  const requestToken = ++sectionRequestToken
   selectedType.value = 'section'
-  selectedChapterId.value = chapter.chapter_id
-  selectedSectionId.value = section.section_id
+  selectedChapterId.value = chapterId
+  selectedSectionId.value = sectionId
+  selectedSectionStub.value = {
+    ...section,
+    chapter_id: chapterId,
+    section_id: sectionId,
+    title: section?.title || section?.name || '小节正文'
+  }
+  selectedSectionDetail.value = null
+  sectionError.value = ''
+  sectionLoading.value = true
+  chapterLoading.value = false
+  await nextTick()
+  scrollToSectionContent()
+  try {
+    const res = await getDsaSectionDetailAPI(chapterId, sectionId)
+    if (requestToken !== sectionRequestToken) return
+    if (res?.code === 200 && res.data?.content) {
+      selectedSectionDetail.value = res.data
+      sectionError.value = ''
+      await nextTick()
+      scrollToSectionContent()
+    } else {
+      sectionError.value = res?.message || '小节内容不存在'
+      ElMessage.error(sectionError.value)
+    }
+  } catch (error) {
+    console.error('小节内容加载失败:', error)
+    if (requestToken === sectionRequestToken) {
+      sectionError.value = '小节内容加载失败'
+    }
+  } finally {
+    if (requestToken === sectionRequestToken) {
+      sectionLoading.value = false
+    }
+  }
+}
+
+const scrollToSectionContent = () => {
+  window.requestAnimationFrame(() => {
+    sectionContentPanel.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 const displayTitle = computed(() => {
@@ -291,9 +417,11 @@ const displayTitle = computed(() => {
 
 const displaySummary = computed(() => {
   if (selectedType.value === 'section') {
+    if (sectionLoading.value) return '正在读取该小节的课程正文。'
+    if (sectionError.value) return sectionError.value
     return selectedSectionContent.value
       ? '本小节已接入基础讲解正文，可配合右侧章节资源、题库和代码任务学习。'
-      : '本小节暂未补充正文，后续会根据课程建设进度完善。'
+      : '请选择左侧小节查看正文。'
   }
   return selectedChapter.value?.manifest?.stage === 'curated_base_resource'
     ? '本章已接入章节概述、小节讲解、练习题、代码任务、视频学习指南和资源索引。'
@@ -303,11 +431,11 @@ const displaySummary = computed(() => {
 const fetchFramework = async () => {
   loading.value = true
   try {
-    const res = await getDsaCourseFrameworkAPI()
+    const res = await getDsaCourseTreeAPI()
     if (res?.code === 200) {
       framework.value = res.data || {}
       if (chapters.value.length) {
-        selectedChapterId.value = chapters.value[0].chapter_id
+        await selectChapter(chapters.value[0])
       }
     }
   } catch (error) {
@@ -449,12 +577,18 @@ onMounted(fetchFramework)
   font-size: 13px;
   line-height: 1.35;
 }
+.section-button:hover {
+  border-color: #409eff;
+  color: #2563eb;
+  background: #eff6ff;
+}
 .course-root.active,
 .chapter-button.active,
 .section-button.active {
   border-color: #1677ff;
   background: #eff6ff;
   color: #1677ff;
+  font-weight: 700;
 }
 .framework-main {
   display: grid;
@@ -479,6 +613,15 @@ onMounted(fetchFramework)
   margin: 0;
   color: #4b5563;
   line-height: 1.7;
+}
+.section-state-panel {
+  color: #4b5563;
+  line-height: 1.7;
+}
+.section-state-panel.error {
+  color: #b42318;
+  border-color: #fecaca;
+  background: #fff7f7;
 }
 .chapter-grid,
 .content-grid {

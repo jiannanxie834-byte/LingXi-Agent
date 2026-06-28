@@ -3,6 +3,18 @@ import request from '@/utils/request'
 export const getPassedResourcesAPI = () => request({ url: '/resource/list/passed', method: 'get' })
 export const getPassedResourceBundlesAPI = () => request({ url: '/resource/bundles/passed', method: 'get' })
 export const getChapterResourceHubsAPI = () => request({ url: '/resource/chapter-hubs', method: 'get' })
+export const getDsaCourseTreeAPI = () => request({
+  url: '/resource/course/tree',
+  method: 'get'
+})
+export const getDsaChapterDetailAPI = (chapterId) => request({
+  url: `/resource/course/chapter/${encodeURIComponent(chapterId)}`,
+  method: 'get'
+})
+export const getDsaSectionDetailAPI = (chapterId, sectionId) => request({
+  url: `/resource/course/section/${encodeURIComponent(chapterId)}/${encodeURIComponent(sectionId)}`,
+  method: 'get'
+})
 export const getResourceArtifactsAPI = (params = {}) => request({
   url: '/resource/artifacts',
   method: 'get',
