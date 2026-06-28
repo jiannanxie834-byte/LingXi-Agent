@@ -1,21 +1,23 @@
 <template>
   <div class="resource-framework-page" v-loading="loading">
-    <header class="framework-header">
-      <div>
-        <span class="course-label">灵析学伴 · 数据结构与算法个性化学习系统</span>
-        <h1>{{ courseTitle }}</h1>
-        <p>资源工厂展示课程树、章节基础资源、小节讲解、练习与代码任务索引。点击章节查看章节概述，点击小节查看对应 Markdown 正文。</p>
-      </div>
-      <div class="framework-summary">
-        <strong>{{ chapterCount }}</strong>
-        <span>章</span>
-        <strong>{{ sectionCount }}</strong>
-        <span>小节</span>
-      </div>
-    </header>
-
-    <main class="framework-layout">
+    <main v-if="activeModule === 'course'" class="framework-layout">
       <aside class="course-tree">
+        <nav class="tree-module-tabs" aria-label="资源工厂模块">
+          <button
+            type="button"
+            :class="{ active: activeModule === 'course' }"
+            @click="activeModule = 'course'"
+          >
+            初始资源
+          </button>
+          <button
+            type="button"
+            :class="{ active: activeModule === 'personalized' }"
+            @click="openPersonalizedModule"
+          >
+            个性化资源
+          </button>
+        </nav>
         <div class="tree-title">
           <strong>课程树</strong>
           <span>课程 → 章节 → 小节</span>
@@ -114,22 +116,6 @@
           </section>
 
           <template v-if="selectedType === 'chapter'">
-            <section class="panel">
-              <h3>本章小节</h3>
-              <div class="section-grid">
-                <button
-                  v-for="section in selectedChapter?.sections || []"
-                  :key="section.section_id"
-                  type="button"
-                  class="section-card"
-                  @click.stop.prevent="selectSection(selectedChapter, section)"
-                >
-                  <strong>{{ section.title }}</strong>
-                  <span>点击查看小节正文</span>
-                </button>
-              </div>
-            </section>
-
             <section v-if="chapterOverviewContent" class="panel markdown-panel">
               <div class="resource-preview-title">
                 <span>章节概述</span>
@@ -240,24 +226,103 @@
         </template>
       </section>
     </main>
+
+    <main v-else class="personalized-layout" v-loading="personalizedLoading">
+      <nav class="personalized-module-tabs" aria-label="资源工厂模块">
+        <button type="button" @click="activeModule = 'course'">课程初始资源库</button>
+        <button type="button" class="active">个性化生成资源</button>
+      </nav>
+
+      <section v-if="!personalizedResources.length" class="panel empty-personalized">
+        <h3>暂无已通过的个性化资源</h3>
+        <p>你可以先在首页提出学习需求，等待资源生成并由管理员审核通过后，这里会自动出现对应资源。</p>
+      </section>
+
+      <section v-else class="personalized-grid">
+        <article
+          v-for="artifact in personalizedResources"
+          :key="artifact.artifact_id"
+          class="personalized-card"
+        >
+          <div class="artifact-type">{{ artifact.type }}</div>
+          <h3>{{ artifact.title }}</h3>
+          <p>{{ artifact.summary || '这是一份结合学习需求与画像生成的个性化资源。' }}</p>
+          <div class="artifact-meta">
+            <span>{{ artifact.created_at || artifact.updated_at || '暂无时间' }}</span>
+            <span>{{ artifact.status === 'published' ? '已通过' : '可查看' }}</span>
+          </div>
+          <button type="button" @click="openArtifactDetail(artifact)">
+            {{ isExerciseArtifact(artifact) ? '查看题目' : '查看资源' }}
+          </button>
+        </article>
+      </section>
+    </main>
+
+    <el-dialog
+      v-model="artifactDialogVisible"
+      width="78%"
+      class="artifact-dialog"
+      destroy-on-close
+    >
+      <template #header>
+        <div class="artifact-dialog-title">
+          <span>{{ selectedArtifact?.type || '个性化资源' }}</span>
+          <h3>{{ selectedArtifact?.title || '资源详情' }}</h3>
+        </div>
+      </template>
+      <div v-if="selectedArtifact" class="artifact-detail">
+        <p class="artifact-summary">{{ selectedArtifact.summary || '暂无摘要' }}</p>
+        <div v-if="isExerciseArtifact(selectedArtifact)" class="exercise-entry">
+          <div>
+            <strong>练习题集</strong>
+            <span>先查看题目，需要作答时进入专用做题页。提交后由 AI 批改，并生成标准答案和诊断与补弱报告。</span>
+          </div>
+          <button type="button" @click="startExercise(selectedArtifact)">去做题</button>
+        </div>
+        <MarkdownRenderer :content="artifactPreviewContent(selectedArtifact)" />
+      </div>
+      <template #footer>
+        <button
+          v-if="isExerciseArtifact(selectedArtifact)"
+          type="button"
+          class="dialog-primary-btn"
+          @click="startExercise(selectedArtifact)"
+        >
+          去做题
+        </button>
+        <button type="button" class="dialog-close-btn" @click="artifactDialogVisible = false">关闭</button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import {
   getDsaChapterDetailAPI,
   getDsaCourseTreeAPI,
-  getDsaSectionDetailAPI
+  getDsaSectionDetailAPI,
+  getResourceArtifactAPI,
+  getResourceArtifactsAPI
 } from '@/api/resource'
 import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
 import MermaidBlock from '@/components/MermaidBlock.vue'
 
+const userStore = useUserStore()
+const router = useRouter()
+const route = useRoute()
 const loading = ref(false)
 const chapterLoading = ref(false)
 const sectionLoading = ref(false)
+const personalizedLoading = ref(false)
+const activeModule = ref('course')
 const framework = ref({})
+const personalizedResources = ref([])
+const artifactDialogVisible = ref(false)
+const selectedArtifact = ref(null)
 const selectedChapterDetail = ref(null)
 const selectedSectionDetail = ref(null)
 const selectedSectionStub = ref(null)
@@ -272,6 +337,7 @@ const chapters = computed(() => framework.value?.chapters || [])
 const courseTitle = computed(() => framework.value?.course_title || '数据结构与算法：可视化理解与代码实践')
 const chapterCount = computed(() => chapters.value.length)
 const sectionCount = computed(() => chapters.value.reduce((sum, chapter) => sum + (chapter.sections || []).length, 0))
+const personalizedTypeCount = computed(() => new Set(personalizedResources.value.map(item => item.type).filter(Boolean)).size)
 const selectedChapter = computed(() => {
   if (selectedChapterDetail.value?.chapter_id === selectedChapterId.value) return selectedChapterDetail.value
   return chapters.value.find(item => item.chapter_id === selectedChapterId.value) || chapters.value[0] || null
@@ -327,6 +393,20 @@ const formatList = (value) => {
   if (Array.isArray(value)) return value.filter(Boolean).join('；')
   if (value === null || value === undefined || value === '') return '暂无'
   return String(value)
+}
+const isExerciseArtifact = (artifact = {}) => {
+  const type = String(artifact?.type || '')
+  return type.includes('练习题') || type === 'exercise_set'
+}
+const stripExerciseAnswers = (text = '') => {
+  return String(text || '')
+    .replace(/(?:^|\n)#{1,6}\s*(答案|参考答案|解析|答案与解析)[\s\S]*?(?=\n#{1,6}\s*题|\n\d+[.、]\s*题|$)/g, '\n')
+    .replace(/(?:答案|参考答案|解析)[:：][\s\S]*?(?=\n(?:\d+[.、]|#{1,6}\s*题)|$)/g, '')
+    .trim()
+}
+const artifactPreviewContent = (artifact = {}) => {
+  const content = artifact?.content || '暂无正文内容'
+  return isExerciseArtifact(artifact) ? (stripExerciseAnswers(content) || '这份练习题集暂未解析出题目。') : content
 }
 const selectCourse = () => {
   selectedType.value = 'course'
@@ -454,15 +534,79 @@ const fetchFramework = async () => {
   }
 }
 
+const fetchPersonalizedResources = async () => {
+  personalizedLoading.value = true
+  try {
+    const res = await getResourceArtifactsAPI({
+      username: userStore.username || 'student',
+      status: 'published',
+      include_public: false,
+      limit: 100
+    })
+    if (res?.code === 200) {
+      personalizedResources.value = (res.data || []).sort((a, b) => {
+        const bTime = new Date(String(b.updated_at || b.created_at || '').replace(/-/g, '/')).getTime() || 0
+        const aTime = new Date(String(a.updated_at || a.created_at || '').replace(/-/g, '/')).getTime() || 0
+        return bTime - aTime
+      })
+    }
+  } catch (error) {
+    console.error('个性化资源加载失败:', error)
+    ElMessage.error('个性化资源加载失败')
+  } finally {
+    personalizedLoading.value = false
+  }
+}
+
+const openPersonalizedModule = async () => {
+  activeModule.value = 'personalized'
+  await fetchPersonalizedResources()
+}
+
+const openArtifactDetail = async (artifact) => {
+  selectedArtifact.value = artifact
+  artifactDialogVisible.value = true
+  if (!artifact?.artifact_id) return
+  try {
+    const res = await getResourceArtifactAPI(artifact.artifact_id)
+    if (res?.code === 200) {
+      selectedArtifact.value = res.data
+    }
+  } catch (error) {
+    console.error('资源详情加载失败:', error)
+    ElMessage.error('资源详情加载失败')
+  }
+}
+
+const startExercise = (artifact) => {
+  const artifactId = artifact?.artifact_id
+  if (!artifactId) {
+    ElMessage.warning('练习题集编号缺失，无法进入做题页')
+    return
+  }
+  artifactDialogVisible.value = false
+  router.push(`/exercise/${encodeURIComponent(artifactId)}`)
+}
+
 onMounted(() => {
+  const targetArtifactId = route.query?.artifact_id || ''
+  const targetModule = route.query?.module || ''
+  if (targetModule === 'personalized' || targetArtifactId) {
+    activeModule.value = 'personalized'
+  }
   fetchFramework()
+  fetchPersonalizedResources().then(async () => {
+    if (!targetArtifactId) return
+    const target = personalizedResources.value.find(item => item.artifact_id === targetArtifactId) || { artifact_id: targetArtifactId }
+    await openArtifactDetail(target)
+  })
 })
 </script>
 
 <style scoped>
 .resource-framework-page {
   min-height: 100%;
-  padding: 20px;
+  padding: 14px 20px 20px;
   background: #f7f8fa;
   box-sizing: border-box;
   overflow-y: auto;
@@ -513,6 +657,174 @@ onMounted(() => {
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
+  min-height: calc(100vh - 154px);
+}
+.resource-module-tabs,
+.personalized-module-tabs {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px;
+  margin: 0 0 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+.resource-module-tabs button,
+.personalized-module-tabs button {
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 16px;
+  background: transparent;
+  color: #4b5563;
+  font-weight: 700;
+  cursor: pointer;
+}
+.resource-module-tabs button.active,
+.personalized-module-tabs button.active {
+  background: #1677ff;
+  color: #fff;
+}
+.tree-module-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.tree-module-tabs button {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 9px 8px;
+  background: #fff;
+  color: #4b5563;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tree-module-tabs button.active {
+  border-color: #1677ff;
+  background: #1677ff;
+  color: #fff;
+}
+.personalized-layout {
+  display: grid;
+  gap: 16px;
+}
+.personalized-hero span {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+}
+.empty-personalized {
+  color: #4b5563;
+}
+.personalized-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.personalized-card {
+  display: grid;
+  gap: 12px;
+  min-height: 230px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+.personalized-card h3 {
+  margin: 0;
+  color: #111827;
+  line-height: 1.35;
+}
+.personalized-card p {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.7;
+}
+.artifact-type {
+  justify-self: start;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.artifact-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #6b7280;
+  font-size: 13px;
+}
+.personalized-card button,
+.dialog-close-btn,
+.dialog-primary-btn,
+.exercise-entry button {
+  justify-self: start;
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 14px;
+  background: #1677ff;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.personalized-card button:hover,
+.dialog-close-btn:hover,
+.dialog-primary-btn:hover,
+.exercise-entry button:hover {
+  background: #0958d9;
+}
+.dialog-primary-btn {
+  margin-right: 10px;
+}
+.exercise-entry {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+.exercise-entry strong,
+.exercise-entry span {
+  display: block;
+}
+.exercise-entry strong {
+  color: #1d4ed8;
+  margin-bottom: 4px;
+}
+.exercise-entry span {
+  color: #4b5563;
+  line-height: 1.6;
+}
+.artifact-dialog-title span {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+}
+.artifact-dialog-title h3 {
+  margin: 0;
+  color: #111827;
+  line-height: 1.35;
+}
+.artifact-detail {
+  display: grid;
+  gap: 16px;
+}
+.artifact-summary {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #4b5563;
+  line-height: 1.7;
 }
 .course-tree,
 .panel {
@@ -521,7 +833,10 @@ onMounted(() => {
   border-radius: 8px;
 }
 .course-tree {
-  max-height: calc(100vh - 210px);
+  position: sticky;
+  top: 14px;
+  height: calc(100vh - 154px);
+  min-height: 560px;
   overflow-y: auto;
   padding: 14px;
 }
@@ -810,7 +1125,9 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
   .course-tree {
-    max-height: none;
+    position: static;
+    height: auto;
+    min-height: 0;
   }
 }
 </style>

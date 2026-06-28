@@ -102,6 +102,27 @@
         </div>
       </div>
 
+      <div v-if="safeList(result.score_breakdown).length || result.diagnosis_evidence" class="evidence-panel">
+        <div class="evidence-header">
+          <h4>诊断依据</h4>
+          <span>由学习行为、作答表现和规划执行综合计算</span>
+        </div>
+        <div v-if="safeList(result.score_breakdown).length" class="breakdown-list">
+          <div v-for="item in result.score_breakdown" :key="item.name" class="breakdown-item">
+            <span>{{ item.name }}</span>
+            <strong>{{ item.value }} 分</strong>
+            <em>权重 {{ Math.round(Number(item.weight || 0) * 100) }}%</em>
+          </div>
+        </div>
+        <div v-if="result.diagnosis_evidence" class="evidence-metrics">
+          <el-tag size="small" effect="plain">近期均分：{{ result.diagnosis_evidence.recent_avg_score ?? '暂无' }}</el-tag>
+          <el-tag size="small" effect="plain">同主题均分：{{ result.diagnosis_evidence.topic_avg_score ?? '暂无' }}</el-tag>
+          <el-tag size="small" effect="plain">练习均分：{{ result.diagnosis_evidence.exercise_avg_score ?? '暂无' }}</el-tag>
+          <el-tag size="small" effect="plain">任务完成率：{{ result.diagnosis_evidence.execution_rate ?? '暂无' }}</el-tag>
+          <el-tag size="small" effect="plain">证据数：{{ result.diagnosis_evidence.evidence_count ?? 0 }}</el-tag>
+        </div>
+      </div>
+
       <div class="result-grid">
         <div class="result-box">
           <h4>薄弱点</h4>
@@ -410,6 +431,69 @@ onMounted(fetchHistory)
   line-height: 1.5;
 }
 
+.evidence-panel {
+  background: #fbfdff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.evidence-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.evidence-header h4 {
+  margin: 0;
+  color: #1f2937;
+}
+
+.evidence-header span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.breakdown-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.breakdown-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e8edf3;
+  border-radius: 8px;
+}
+
+.breakdown-item span {
+  color: #475467;
+}
+
+.breakdown-item strong {
+  color: #1677ff;
+}
+
+.breakdown-item em {
+  grid-column: 1 / -1;
+  color: #98a2b3;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.evidence-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .manual-collapse {
   border-top: 1px solid #e8edf3;
   border-bottom: 1px solid #e8edf3;
@@ -483,6 +567,7 @@ onMounted(fetchHistory)
   .form-grid,
   .result-grid,
   .location-grid,
+  .breakdown-list,
   .package-grid {
     grid-template-columns: 1fr;
   }

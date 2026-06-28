@@ -191,10 +191,10 @@
           
           <div v-if="!isNewUser" class="active-advice-list">
             <div class="advice-row info-blue">
-              <strong>风格认知：</strong>偏向于“{{ profileAdvice.style }}”。建议优先使用匹配该风格的资源。
+              <strong>资源偏好：</strong>偏向于“{{ profileAdvice.style }}”。建议优先使用匹配该偏好的资源。
             </div>
             <div class="advice-row warning-orange">
-              <strong>目前的弱点：</strong>{{ profileAdvice.weakness }}。
+              <strong>易错修复：</strong>{{ profileAdvice.weakness }}。
             </div>
             <div class="advice-row success-green">
               <strong>下一步规划：</strong>{{ profileAdvice.next }}
@@ -380,13 +380,13 @@ const knowledgeTags = computed(() => userStore.tags || [])
 const radarLabels = [
   '知识基础',
   '学习目标',
-  '学习阶段',
-  '知识短板',
-  '认知风格',
-  '媒介偏好',
+  '概念理解',
+  '练习表现',
   '实践能力',
-  '学习节奏',
-  '易错模式',
+  '规划执行',
+  '复盘能力',
+  '易错修复',
+  '媒介偏好',
   '兴趣方向'
 ]
 const radarValues = computed(() => {
@@ -403,15 +403,15 @@ const hasProfileData = computed(() => {
 // 判断当前是否真正没有画像数据，而不是按演示账号名硬编码判断
 const isNewUser = computed(() => !hasProfileData.value)
 const dimensionDescriptions = {
-  知识基础: '结合本轮主题、同主题评价和历史学习证据估算。',
-  学习目标: '根据自然语言目标、规划需求和项目诉求判断清晰度。',
-  学习阶段: '反映当前主题处于入门、基础、进阶或待确认阶段。',
-  知识短板: '来自错题、评价、追问和补弱记录的薄弱点识别。',
-  认知风格: '衡量图解、代码、练习、项目等资源形式的匹配度。',
-  媒介偏好: '根据视频、导图、动画、文字等偏好动态更新。',
+  知识基础: '结合当前主题、同主题历史表现和近期综合学习证据估算。',
+  学习目标: '根据自然语言目标、规划需求、项目诉求和学习行为判断清晰度。',
+  概念理解: '由评价记录、主题定位、反馈表达清晰度和知识单元掌握情况共同计算。',
+  练习表现: '来自练习题作答、AI 批改、同主题练习均分和错因记录。',
   实践能力: '反映代码实验、项目任务和动手训练的准备度。',
-  学习节奏: '结合计划完成率、待办推进和学习强度判断。',
-  易错模式: '记录高频错误类型和系统补弱后的修复程度。',
+  规划执行: '结合学习计划、待办任务和学习路径完成情况判断。',
+  复盘能力: '来自错因说明、评价记录、作答反馈和补弱记录。',
+  易错修复: '衡量薄弱点是否被练习、评价和补弱资源持续修复。',
+  媒介偏好: '根据图解、导图、文字、代码、练习等资源使用和表达偏好动态更新。',
   兴趣方向: '概括近期关注知识点和数据结构与算法应用方向。'
 }
 const dimensionColor = (value) => {
@@ -435,8 +435,8 @@ const dimensionItems = computed(() => {
 const profileAdvice = computed(() => {
   const dimensions = userStore.profileDimensions || {}
   return {
-    style: dimensions['认知风格'] || '待学习数据生成',
-    weakness: dimensions['知识短板'] || '待学习评价生成',
+    style: dimensions['媒介偏好'] || '待学习数据生成',
+    weakness: dimensions['易错修复'] || '待学习评价生成',
     next: dimensions['学习目标'] ? `围绕「${dimensions['学习目标']}」生成下一轮学习资源与路径。` : '完成学习对话或评价后，系统将生成下一轮学习资源与路径。'
   }
 })

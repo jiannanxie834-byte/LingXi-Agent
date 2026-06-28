@@ -166,6 +166,7 @@ import { useUserStore } from '@/stores/user'
 //  1. 精准导入 API 文件里真实暴露的名字
 import { getPlanListAPI, deleteRouteAPI, savePlanAPI } from '@/api/plan'
 import { getTodoListAPI, saveTodoAPI } from '@/api/todo'
+import { getResourceArtifactAPI } from '@/api/resource'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import RouteEditorDrawer from '@/components/RouteEditorDrawer.vue'
 
@@ -194,7 +195,7 @@ const fetchPlansData = async () => {
   try {
     const res = await getPlanListAPI(userStore.username)
     if (res && res.code === 200) {
-      plans.value = (res.data || []).map(normalizePlan)
+      plans.value = sortPlansNewestFirst((res.data || []).map(normalizePlan))
     }
   } catch (error) {
     console.error('拉取路线失败:', error)
@@ -205,7 +206,7 @@ const fetchPlansData = async () => {
 
 const persistPlans = async (successMessage = '') => {
   try {
-    plans.value = plans.value.map(normalizePlan)
+    plans.value = sortPlansNewestFirst(plans.value.map(normalizePlan))
     const res = await savePlanAPI(userStore.username, plans.value)
     if (successMessage && res && res.code === 200) {
       ElMessage.success(successMessage)
@@ -213,6 +214,16 @@ const persistPlans = async (successMessage = '') => {
   } catch (error) {
     console.error('保存学习路线失败:', error)
   }
+}
+
+const planTimeValue = (plan = {}) => {
+  const value = plan.updated_at || plan.created_at || ''
+  const time = value ? new Date(String(value).replace(/-/g, '/')).getTime() : 0
+  return Number.isFinite(time) ? time : 0
+}
+
+const sortPlansNewestFirst = (items = []) => {
+  return [...items].sort((a, b) => planTimeValue(b) - planTimeValue(a))
 }
 
 const normalizeStepResources = (resources = [], step = {}) => {
@@ -236,6 +247,7 @@ const normalizeStepResources = (resources = [], step = {}) => {
       title: res.title || res.name || '学习资源',
       type: res.type || 'resource',
       unit_id: res.unit_id || step.unit_id || '',
+      status: res.status || '',
       route,
       artifact_id: artifactId,
       resource_id: resourceId,
@@ -251,8 +263,13 @@ const normalizeStepResources = (resources = [], step = {}) => {
 }
 
 const isLinkedResource = (res = {}) => Boolean(res.route && res.query?.artifact_id)
+const isPublishedArtifact = (artifact = {}) => {
+  const status = String(artifact.status || '').trim()
+  return ['published', '已通过', '公开', '正常开放'].includes(status)
+}
 
 const normalizePlan = (plan = {}) => {
+  const nowText = new Date().toISOString().slice(0, 19).replace('T', ' ')
   const normalized = {
     ...plan,
     id: plan.id || `route_${Date.now()}`,
@@ -260,6 +277,8 @@ const normalizePlan = (plan = {}) => {
     desc: plan.desc || plan.description || '',
     isCollapsed: Boolean(plan.isCollapsed),
     isAiGenerated: plan.isAiGenerated !== false,
+    created_at: plan.created_at || nowText,
+    updated_at: plan.updated_at || plan.created_at || nowText,
     tasks: Array.isArray(plan.tasks) ? plan.tasks : []
   }
   normalized.tasks = normalized.tasks.map((task, index) => {
@@ -340,12 +359,15 @@ const createNewPlan = async () => {
     placeholder: '如：监督学习复习路线'
   })
   if (!title) return
-  plans.value.push({
+  const nowText = new Date().toISOString().slice(0, 19).replace('T', ' ')
+  plans.value.unshift({
     id: `route_${Date.now()}`,
     title,
     desc: '学生自主创建的学习路线。',
     isCollapsed: false,
     isAiGenerated: false,
+    created_at: nowText,
+    updated_at: nowText,
     tasks: [{ id: `node_${Date.now() + 1}`, title: '准备开始的第一步', desc: '点击下方在此处插入新任务。', status: 'pending', isCustom: true, unit_id: '', resources: [] }]
   })
   persistPlans('新规划路线已保存')
@@ -440,15 +462,34 @@ const persistTodos = async () => {
   }
 }
 
-const openStepResource = (res, step) => {
+const openStepResource = async (res, step) => {
   if (!res?.route) {
     ElMessage.info('该资源尚未绑定详情页')
+    return
+  }
+  const artifactId = res.query?.artifact_id || res.artifact_id
+  if (!artifactId) {
+    ElMessage.info('该资源尚未生成可打开的个性化资源卡片')
+    return
+  }
+  try {
+    const detail = await getResourceArtifactAPI(artifactId)
+    const artifact = detail?.data || {}
+    if (!isPublishedArtifact(artifact)) {
+      ElMessage.warning('当前资源还未审核通过，请等待管理员审核')
+      return
+    }
+  } catch (error) {
+    console.error('检查资源状态失败:', error)
+    ElMessage.warning('当前资源还未审核通过，请等待管理员审核')
     return
   }
   router.push({
     path: res.route,
     query: {
       ...(res.query || {}),
+      module: 'personalized',
+      artifact_id: artifactId,
       step_id: step.id,
       unit_id: res.unit_id || step.unit_id || ''
     }
