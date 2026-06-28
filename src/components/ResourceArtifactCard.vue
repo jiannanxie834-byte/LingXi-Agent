@@ -1,5 +1,5 @@
 <template>
-  <div class="artifact-card">
+  <div v-if="!isHiddenDsaAnimation" class="artifact-card">
     <div class="artifact-head">
       <div>
         <strong>{{ artifact.title || '未命名 Artifact' }}</strong>
@@ -81,9 +81,16 @@ const payload = computed(() => ({
 }))
 
 const typeText = computed(() => `${props.artifact.type || ''} ${props.artifact.content_format || ''}`.toLowerCase())
+const courseText = computed(() => `${props.artifact.course_id || props.artifact.metadata?.course_id || props.artifact.dsa_course_map?.course_id || ''}`)
+const isDsaAnimationArtifact = computed(() => {
+  const text = `${typeText.value} ${props.artifact.resource_key || ''} ${props.artifact.source_file || ''}`.toLowerCase()
+  return courseText.value === 'data_structures_algorithms'
+    && (text.includes('算法可视化') || text.includes('交互动画') || text.includes('animation_spec') || text.includes('animation'))
+})
+const isHiddenDsaAnimation = computed(() => isDsaAnimationArtifact.value)
 const isVideoRecommendation = computed(() => typeText.value.includes('视频推荐') || typeText.value.includes('video_recommendation'))
 const isVideoGuide = computed(() => typeText.value.includes('观看指南') || typeText.value.includes('personalized_video_guide'))
-const isInteractiveAnimation = computed(() => typeText.value.includes('交互动画') || typeText.value.includes('animation_spec'))
+const isInteractiveAnimation = computed(() => !isDsaAnimationArtifact.value && (typeText.value.includes('算法可视化') || typeText.value.includes('交互动画') || typeText.value.includes('animation_spec')))
 const isCodeLab = computed(() => typeText.value.includes('pytorch') || typeText.value.includes('代码实验') || typeText.value.includes('code_lab'))
 const isExerciseSet = computed(() => typeText.value.includes('练习题') || typeText.value.includes('exercise_set'))
 const isPptArtifact = computed(() => typeText.value.includes('ppt') || typeText.value.includes('pptx'))

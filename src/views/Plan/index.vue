@@ -2,8 +2,8 @@
   <div class="plan-page">
     <div class="page-header">
       <div class="title-wrap">
-        <h2 class="main-title">《深度学习》个性化学习路径规划</h2>
-        <p class="sub-title">基于课程图谱与多智能体生成 ｜ 支持 CNN、反向传播、Transformer、PyTorch 项目动态调整</p>
+        <h2 class="main-title">《数据结构与算法》个性化学习路径规划</h2>
+        <p class="sub-title">基于课程图谱与多智能体生成 ｜ 支持复杂度分析、树图、动态规划、字符串算法与代码实践动态调整</p>
       </div>
       <div class="header-actions">
         <button class="btn btn-secondary" @click="createNewPlan">+ 新增自主规划路线</button>

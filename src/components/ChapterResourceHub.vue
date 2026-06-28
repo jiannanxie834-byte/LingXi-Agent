@@ -18,7 +18,7 @@
     <div class="resource-block">
       <h3>必学资源</h3>
       <ChapterResourceSection
-        v-for="item in hub.primary_resources || []"
+        v-for="item in visiblePrimaryResources"
         :key="item.source_file || item.resource_key"
         :item="item"
         :chapter-title="hub.chapter_title"
@@ -26,10 +26,10 @@
       />
     </div>
 
-    <div v-if="(hub.optional_resources || []).length" class="resource-block">
+    <div v-if="visibleOptionalResources.length" class="resource-block">
       <h3>扩展资源</h3>
       <ChapterResourceSection
-        v-for="item in hub.optional_resources || []"
+        v-for="item in visibleOptionalResources"
         :key="item.source_file || item.resource_key"
         :item="item"
         :chapter-title="hub.chapter_title"
@@ -40,13 +40,24 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import ChapterResourceSection from '@/components/ChapterResourceSection.vue'
 
-defineProps({
+const props = defineProps({
   hub: { type: Object, default: null }
 })
 
 defineEmits(['view'])
+
+const isDsaAnimationItem = (item = {}) => {
+  const courseId = props.hub?.course_id || props.hub?.manifest?.course_id || ''
+  const text = `${item.type || ''} ${item.source_file || ''} ${item.resource_key || ''}`.toLowerCase()
+  return courseId === 'data_structures_algorithms'
+    && (text.includes('animation') || text.includes('算法可视化') || text.includes('交互动画'))
+}
+
+const visiblePrimaryResources = computed(() => (props.hub?.primary_resources || []).filter(item => !isDsaAnimationItem(item)))
+const visibleOptionalResources = computed(() => (props.hub?.optional_resources || []).filter(item => !isDsaAnimationItem(item)))
 </script>
 
 <style scoped>

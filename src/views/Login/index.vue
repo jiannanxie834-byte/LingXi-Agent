@@ -2,8 +2,8 @@
   <div class="login-container">
     <el-card class="login-card" shadow="always">
       <div class="logo-box">
-        <h2>灵析学伴 · 深度学习</h2>
-        <p>个性化多模态资源生成与学习多智能体系统</p>
+        <h2>灵析学伴 · 数据结构与算法个性化多模态学习系统</h2>
+        <p>基于多智能体协同的算法可视化理解、代码实践与个性化训练平台</p>
       </div>
 
       <div class="mode-toggle">
@@ -138,7 +138,7 @@ const handleLogin = async () => {
       }
         userStore.login(userData)
       
-        ElMessage.success(`欢迎进入深度学习智能学习舱，${userData.username}！`)
+        ElMessage.success(`欢迎进入数据结构与算法智能学习舱，${userData.username}！`)
         router.push(userData.role === 'admin' ? '/admin/dashboard' : '/') 
       }
     } catch (error) {

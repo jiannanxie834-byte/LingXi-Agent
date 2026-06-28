@@ -145,7 +145,7 @@ const welcomeMessage = {
   role: 'ai',
   isIntro: true,
   content:
-    '你好，我是灵析学伴。你可以围绕《深度学习》课程直接提问，例如 CNN、反向传播、Transformer、PyTorch 图像分类实验，或让我生成讲解、题集、视频观看指南、交互动画和项目路线。'
+    '你好，我是灵析学伴。你可以围绕《数据结构与算法》课程直接提问，例如复杂度分析、二分查找、BFS、动态规划或迷宫寻路项目，或让我生成讲解、题集、代码任务、视频观看指南和项目路线。'
 }
 
 const messageList = ref([{ ...welcomeMessage }])

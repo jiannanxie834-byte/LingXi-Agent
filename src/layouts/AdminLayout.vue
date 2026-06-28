@@ -2,7 +2,7 @@
   <div class="admin-layout">
     <el-container class="layout-container">
       <el-aside width="240px" class="aside">
-        <div class="admin-logo">灵析学伴 · 深度学习管理后台</div>
+        <div class="admin-logo">灵析学伴 · 数据结构与算法管理后台</div>
         <el-menu
           :default-active="activeMenu"
           class="el-menu-vertical"

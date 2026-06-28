@@ -1,7 +1,7 @@
 <template>
   <div class="layout">
     <div class="header">
-      <div class="logo" @click="goPage('/')" style="cursor:pointer">灵析学伴 · 深度学习</div>
+      <div class="logo" @click="goPage('/')" style="cursor:pointer">灵析学伴 · 数据结构与算法</div>
       
       <div class="header-right">
         <el-button v-if="!userStore.isLoggedIn" type="primary" round @click="goToLogin">

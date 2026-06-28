@@ -264,7 +264,7 @@
           该资源教学内容不足，不建议通过审核。
         </div>
         <div v-if="isDeprecatedStandaloneType(selectedResource.type)" class="deprecated-resource-panel">
-          多模态能力已调整为主题学习包聚合视图，不再作为独立资源正文生成。新资源应使用课程讲解文档、练习题集、PyTorch 实操案例、视频推荐卡、交互动画规格等 Artifact 类型。
+          多模态能力已调整为主题学习包聚合视图，不再作为独立资源正文生成。新资源应使用课程讲解文档、练习题集、代码实验、视频推荐卡、算法可视化动画规格等 Artifact 类型。
         </div>
         <div v-if="selectedResource.review_comment" class="detail-review-comment">
           <strong>管理员审核意见</strong>
@@ -537,7 +537,7 @@ const isLowQuality = (resource = {}) => {
   if (score > 0 && score < 80) return true
   if (resource.type === '课程讲解文档' && plainTextLength(resource.content) < 3000) return true
   if (resource.type === '练习题集' && questionCount(resource.content) < 8) return true
-  return plainTextLength(resource.content) < 1200 && !['知识点思维导图', '交互动画规格', '动画分镜'].includes(resource.type)
+  return plainTextLength(resource.content) < 1200 && !['知识点思维导图', '算法可视化动画规格', '交互动画规格', '动画分镜'].includes(resource.type)
 }
 
 const matchesGovernanceFilter = (resource) => {

@@ -1,28 +1,11 @@
 import request from '@/utils/request'
 
-export const getDeepLearningCourseMapAPI = () => request({
-  url: '/course/deep-learning/map',
+export const getDsaCourseFrameworkAPI = () => request({
+  url: '/course/data-structures-algorithms/framework',
   method: 'get'
 })
 
-export const getDeepLearningUnitsAPI = () => request({
-  url: '/course/deep-learning/units',
+export const validateDsaCourseFrameworkAPI = () => request({
+  url: '/course/data-structures-algorithms/framework/validate',
   method: 'get'
-})
-
-export const matchDeepLearningTopicAPI = (params = {}) => request({
-  url: '/course/deep-learning/match',
-  method: 'get',
-  params
-})
-
-export const getDeepLearningVideoCatalogAPI = () => request({
-  url: '/course/deep-learning/video/catalog',
-  method: 'get'
-})
-
-export const getDeepLearningVideoRecommendationsAPI = (params = {}) => request({
-  url: '/course/deep-learning/video/recommendations',
-  method: 'get',
-  params
 })

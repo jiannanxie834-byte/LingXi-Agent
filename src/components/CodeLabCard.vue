@@ -9,7 +9,7 @@
 import { computed } from 'vue'
 import MarkdownRenderer from '@/components/MarkdownRenderer/index.vue'
 const props = defineProps({ artifact: { type: Object, default: () => ({}) } })
-const title = computed(() => props.artifact.title || 'PyTorch 实操案例')
+const title = computed(() => props.artifact.title || '代码实验')
 const content = computed(() => props.artifact.content || '')
 </script>
 

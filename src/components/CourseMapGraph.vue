@@ -1,8 +1,8 @@
 <template>
   <div class="course-map">
     <div class="map-head">
-      <strong>《深度学习》课程图谱</strong>
-      <span>12 章 · 12 知识单元</span>
+      <strong>《数据结构与算法》课程图谱</strong>
+      <span>12 章 · 80 知识单元骨架</span>
     </div>
     <div class="unit-row">
       <span
@@ -23,18 +23,18 @@ defineProps({
 })
 
 const units = [
-  { id: 'dl_intro_diagnosis', label: '导论' },
-  { id: 'dl_prereq_math_ml', label: '前置' },
-  { id: 'dl_nn_perceptron', label: 'MLP' },
-  { id: 'dl_backprop_basic', label: '反传' },
-  { id: 'dl_optimization_adam', label: '优化' },
-  { id: 'dl_regularization_dropout_bn', label: '正则' },
-  { id: 'dl_cnn_conv_basic', label: 'CNN' },
-  { id: 'dl_rnn_lstm_gru', label: 'RNN' },
-  { id: 'dl_transformer_attention', label: 'Transformer' },
-  { id: 'dl_generative_intro', label: '生成' },
-  { id: 'dl_pytorch_practice', label: 'PyTorch' },
-  { id: 'dl_final_project', label: '项目' }
+  { id: 'chapter_01_complexity', label: '复杂度' },
+  { id: 'chapter_02_linear_structures', label: '线性表' },
+  { id: 'chapter_03_recursion_divide_backtracking', label: '递归' },
+  { id: 'chapter_04_sorting_searching', label: '排序' },
+  { id: 'chapter_05_hash_heap_priority_queue', label: '哈希/堆' },
+  { id: 'chapter_06_trees', label: '树' },
+  { id: 'chapter_07_graph_traversal', label: '图遍历' },
+  { id: 'chapter_08_shortest_path_mst', label: '路径/MST' },
+  { id: 'chapter_09_greedy', label: '贪心' },
+  { id: 'chapter_10_dynamic_programming', label: '动态规划' },
+  { id: 'chapter_11_string_algorithms', label: '字符串' },
+  { id: 'chapter_12_algorithm_project', label: '项目' }
 ]
 </script>
 
