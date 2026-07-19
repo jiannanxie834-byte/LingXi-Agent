@@ -5,3 +5,8 @@ export const gradeExerciseAPI = (data) => request({
   method: 'post',
   data
 })
+
+export const revealExerciseAnswersAPI = (artifactId) => request({
+  url: `/exercise/${encodeURIComponent(artifactId)}/answers`,
+  method: 'get'
+})

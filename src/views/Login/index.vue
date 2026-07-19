@@ -54,9 +54,8 @@
       </el-form>
       
       <div class="tips" v-if="isLoginMode">
-        <p> 测试快捷通道：</p>
-        <p>输入 <strong>admin</strong> / 123456 进入超级管理员</p>
-        <p>输入 <strong>student</strong> / 123456 进入普通学生端</p>
+        <p>演示账号由部署人员现场提供。</p>
+        <p>账号口令不会写入页面、源码或提交文档。</p>
       </div>
     </el-card>
   </div>

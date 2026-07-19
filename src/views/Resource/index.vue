@@ -65,7 +65,7 @@
             <span>课程框架</span>
             <h2>以章节级基础资源和条目级索引支撑后续个性化生成</h2>
             <p>
-              初始资源库保存课程结构、章节资源入口、题库、代码任务、视频条目、evidence 和 policy。
+              初始资源库保存课程结构、章节资源入口、题库、代码任务、视频条目、课程依据与生成规范。
               学生后续提出学习需求时，系统会先定位课程主题，再结合画像生成新的个性化学习资源。
             </p>
           </div>
@@ -233,14 +233,29 @@
         <button type="button" class="active">个性化生成资源</button>
       </nav>
 
-      <section v-if="!personalizedResources.length" class="panel empty-personalized">
-        <h3>暂无已通过的个性化资源</h3>
-        <p>你可以先在首页提出学习需求，等待资源生成并由管理员审核通过后，这里会自动出现对应资源。</p>
+      <section class="personalized-toolbar">
+        <label>
+          <span>搜索</span>
+          <input v-model="personalizedKeyword" type="search" placeholder="输入标题或知识点" @input="personalizedPage = 1">
+        </label>
+        <label>
+          <span>资源类型</span>
+          <select v-model="personalizedType" @change="personalizedPage = 1">
+            <option value="">全部类型</option>
+            <option v-for="type in personalizedTypes" :key="type" :value="type">{{ type }}</option>
+          </select>
+        </label>
+        <strong>共 {{ filteredPersonalizedResources.length }} 份</strong>
+      </section>
+
+      <section v-if="!filteredPersonalizedResources.length" class="panel empty-personalized">
+        <h3>{{ personalizedResources.length ? '没有匹配的资源' : '暂无已通过的个性化资源' }}</h3>
+        <p>{{ personalizedResources.length ? '请调整搜索词或资源类型。' : '你可以先在首页提出学习需求，生成并审核通过后会在这里出现。' }}</p>
       </section>
 
       <section v-else class="personalized-grid">
         <article
-          v-for="artifact in personalizedResources"
+          v-for="artifact in pagedPersonalizedResources"
           :key="artifact.artifact_id"
           class="personalized-card"
         >
@@ -256,6 +271,12 @@
           </button>
         </article>
       </section>
+
+      <nav v-if="personalizedTotalPages > 1" class="resource-pagination" aria-label="个性化资源分页">
+        <button type="button" :disabled="personalizedPage <= 1" @click="personalizedPage -= 1">上一页</button>
+        <span>第 {{ personalizedPage }} / {{ personalizedTotalPages }} 页</span>
+        <button type="button" :disabled="personalizedPage >= personalizedTotalPages" @click="personalizedPage += 1">下一页</button>
+      </nav>
     </main>
 
     <el-dialog
@@ -272,24 +293,41 @@
       </template>
       <div v-if="selectedArtifact" class="artifact-detail">
         <p class="artifact-summary">{{ selectedArtifact.summary || '暂无摘要' }}</p>
+        <section v-if="playableAssets.length" class="playable-assets" aria-label="可播放多媒体产物">
+          <div v-for="asset in playableAssets" :key="asset.url" class="playable-asset-card">
+            <div class="playable-asset-heading">
+              <div>
+                <span>可播放产物</span>
+                <strong>{{ asset.title || '个性化教学动画' }}</strong>
+              </div>
+              <small v-if="asset.duration_seconds">约 {{ asset.duration_seconds }} 秒</small>
+            </div>
+            <iframe
+              v-if="asset.mime_type === 'text/html'"
+              class="playable-frame"
+              :src="asset.url"
+              :title="asset.title || '个性化教学动画'"
+              sandbox="allow-scripts"
+            />
+            <video
+              v-else
+              class="playable-video"
+              :src="asset.url"
+              controls
+              preload="metadata"
+            />
+          </div>
+        </section>
         <div v-if="isExerciseArtifact(selectedArtifact)" class="exercise-entry">
           <div>
             <strong>练习题集</strong>
-            <span>先查看题目，需要作答时进入专用做题页。提交后由 AI 批改，并生成标准答案和诊断与补弱报告。</span>
+            <span>共 {{ selectedArtifact.question_count || selectedArtifact.questions?.length || 0 }} 题。进入作答页后按题型作答，提交前不展示答案与解析。</span>
           </div>
-          <button type="button" @click="startExercise(selectedArtifact)">去做题</button>
+          <button type="button" @click="startExercise(selectedArtifact)">开始练习</button>
         </div>
-        <MarkdownRenderer :content="artifactPreviewContent(selectedArtifact)" />
+        <MarkdownRenderer v-else :content="selectedArtifact.content || '暂无正文内容'" />
       </div>
       <template #footer>
-        <button
-          v-if="isExerciseArtifact(selectedArtifact)"
-          type="button"
-          class="dialog-primary-btn"
-          @click="startExercise(selectedArtifact)"
-        >
-          去做题
-        </button>
         <button type="button" class="dialog-close-btn" @click="artifactDialogVisible = false">关闭</button>
       </template>
     </el-dialog>
@@ -321,6 +359,10 @@ const personalizedLoading = ref(false)
 const activeModule = ref('course')
 const framework = ref({})
 const personalizedResources = ref([])
+const personalizedKeyword = ref('')
+const personalizedType = ref('')
+const personalizedPage = ref(1)
+const personalizedPageSize = 12
 const artifactDialogVisible = ref(false)
 const selectedArtifact = ref(null)
 const selectedChapterDetail = ref(null)
@@ -338,6 +380,22 @@ const courseTitle = computed(() => framework.value?.course_title || '数据结�
 const chapterCount = computed(() => chapters.value.length)
 const sectionCount = computed(() => chapters.value.reduce((sum, chapter) => sum + (chapter.sections || []).length, 0))
 const personalizedTypeCount = computed(() => new Set(personalizedResources.value.map(item => item.type).filter(Boolean)).size)
+const personalizedTypes = computed(() => [...new Set(personalizedResources.value.map(item => item.type).filter(Boolean))].sort())
+const filteredPersonalizedResources = computed(() => {
+  const keyword = personalizedKeyword.value.trim().toLowerCase()
+  return personalizedResources.value.filter((item) => {
+    const typeMatches = !personalizedType.value || item.type === personalizedType.value
+    const keywordMatches = !keyword || [item.title, item.summary, item.type]
+      .some(value => String(value || '').toLowerCase().includes(keyword))
+    return typeMatches && keywordMatches
+  })
+})
+const personalizedTotalPages = computed(() => Math.max(1, Math.ceil(filteredPersonalizedResources.value.length / personalizedPageSize)))
+const pagedPersonalizedResources = computed(() => {
+  const safePage = Math.min(personalizedPage.value, personalizedTotalPages.value)
+  const start = (safePage - 1) * personalizedPageSize
+  return filteredPersonalizedResources.value.slice(start, start + personalizedPageSize)
+})
 const selectedChapter = computed(() => {
   if (selectedChapterDetail.value?.chapter_id === selectedChapterId.value) return selectedChapterDetail.value
   return chapters.value.find(item => item.chapter_id === selectedChapterId.value) || chapters.value[0] || null
@@ -398,16 +456,9 @@ const isExerciseArtifact = (artifact = {}) => {
   const type = String(artifact?.type || '')
   return type.includes('练习题') || type === 'exercise_set'
 }
-const stripExerciseAnswers = (text = '') => {
-  return String(text || '')
-    .replace(/(?:^|\n)#{1,6}\s*(答案|参考答案|解析|答案与解析)[\s\S]*?(?=\n#{1,6}\s*题|\n\d+[.、]\s*题|$)/g, '\n')
-    .replace(/(?:答案|参考答案|解析)[:：][\s\S]*?(?=\n(?:\d+[.、]|#{1,6}\s*题)|$)/g, '')
-    .trim()
-}
-const artifactPreviewContent = (artifact = {}) => {
-  const content = artifact?.content || '暂无正文内容'
-  return isExerciseArtifact(artifact) ? (stripExerciseAnswers(content) || '这份练习题集暂未解析出题目。') : content
-}
+const playableAssets = computed(() => (selectedArtifact.value?.assets || []).filter(asset => (
+  asset?.url && (asset.mime_type === 'text/html' || String(asset.mime_type || '').startsWith('video/'))
+)))
 const selectCourse = () => {
   selectedType.value = 'course'
   selectedChapterId.value = ''
@@ -541,7 +592,7 @@ const fetchPersonalizedResources = async () => {
       username: userStore.username || 'student',
       status: 'published',
       include_public: false,
-      limit: 100
+      limit: 200
     })
     if (res?.code === 200) {
       personalizedResources.value = (res.data || []).sort((a, b) => {
@@ -708,6 +759,41 @@ onMounted(() => {
   display: grid;
   gap: 16px;
 }
+.personalized-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+.personalized-toolbar label {
+  display: grid;
+  gap: 6px;
+}
+.personalized-toolbar label span {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+.personalized-toolbar input,
+.personalized-toolbar select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 7px;
+  background: #fff;
+  color: #111827;
+  box-sizing: border-box;
+}
+.personalized-toolbar strong {
+  padding: 10px 2px;
+  color: #2563eb;
+  white-space: nowrap;
+}
 .personalized-hero span {
   color: #2563eb;
   font-size: 13px;
@@ -720,6 +806,25 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+}
+.resource-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  color: #475569;
+}
+.resource-pagination button {
+  border: 1px solid #dbe3ef;
+  border-radius: 7px;
+  padding: 8px 13px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+}
+.resource-pagination button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 .personalized-card {
   display: grid;
@@ -793,6 +898,11 @@ onMounted(() => {
 .exercise-entry span {
   display: block;
 }
+@media (max-width: 720px) {
+  .personalized-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
 .exercise-entry strong {
   color: #1d4ed8;
   margin-bottom: 4px;
@@ -825,6 +935,52 @@ onMounted(() => {
   background: #f9fafb;
   color: #4b5563;
   line-height: 1.7;
+}
+.playable-assets {
+  display: grid;
+  gap: 14px;
+}
+.playable-asset-card {
+  overflow: hidden;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+}
+.playable-asset-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+}
+.playable-asset-heading div {
+  display: grid;
+  gap: 3px;
+}
+.playable-asset-heading span {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+.playable-asset-heading strong {
+  color: #172554;
+}
+.playable-asset-heading small {
+  flex: none;
+  color: #64748b;
+}
+.playable-frame,
+.playable-video {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: #0f172a;
+}
+.playable-frame {
+  height: min(520px, 62vh);
+}
+.playable-video {
+  max-height: 520px;
 }
 .course-tree,
 .panel {

@@ -127,34 +127,65 @@
       <el-card class="grid-left-card" shadow="never">
         <template #header>
           <div class="card-header-bar">
-            <span class="card-title"> AI动态学习画像</span>
-            <el-tag size="small" type="success" effect="light" class="refresh-badge">
-              {{ profileUpdateText }}
-            </el-tag>
+            <span class="card-title">AI 动态学习画像</span>
+            <div class="profile-header-meta">
+              <el-tag size="small" effect="plain">6 项核心信息</el-tag>
+              <el-tag size="small" type="success" effect="light" class="refresh-badge">
+                {{ profileUpdateText }}
+              </el-tag>
+            </div>
           </div>
         </template>
-        <div ref="radarChartRef" class="radar-chart-container"></div>
-        <div v-if="hasProfileData" class="dimension-grid">
-          <div
-            v-for="item in dimensionItems"
-            :key="item.label"
-            class="dimension-tile"
-          >
-            <div class="dimension-head">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
+        <div v-if="hasProfileData" class="profile-core-content">
+          <p class="profile-method-note">
+            分数只使用有效作答和任务记录；目标、薄弱点与偏好保留原始语义，不换算成虚拟分值。
+          </p>
+
+          <section class="quantitative-section">
+            <h3>可量化学习状态</h3>
+            <div v-for="item in quantitativeItems" :key="item.label" class="metric-row">
+              <div class="metric-heading">
+                <span>{{ item.label }}</span>
+                <strong v-if="item.value !== null">{{ item.value }}<small> / 100</small></strong>
+                <el-tag v-else size="small" type="info" effect="plain">{{ item.display }}</el-tag>
+              </div>
+              <el-progress
+                v-if="item.value !== null"
+                :percentage="item.value"
+                :stroke-width="8"
+                :show-text="false"
+                :color="dimensionColor(item.value)"
+              />
+              <p>{{ item.evidence }}</p>
             </div>
-            <el-progress
-              :percentage="item.value"
-              :stroke-width="7"
-              :show-text="false"
-              :color="item.color"
-            />
-            <p>{{ item.description }}</p>
+          </section>
+
+          <section class="descriptive-section">
+            <h3>对话与行为结论</h3>
+            <div v-for="item in descriptiveItems" :key="item.label" class="profile-fact-row">
+              <div class="fact-label">
+                <span>{{ item.label }}</span>
+                <el-tag size="small" :type="statusType(item.status)" effect="plain">
+                  {{ statusText(item.status) }}
+                </el-tag>
+              </div>
+              <div v-if="item.kind === 'tags' && item.values.length" class="fact-tags">
+                <el-tag v-for="value in item.values" :key="value" size="small" effect="light">
+                  {{ value }}
+                </el-tag>
+              </div>
+              <strong v-else class="fact-value">{{ item.display }}</strong>
+              <p>{{ item.evidence }}</p>
+            </div>
+          </section>
+
+          <div class="profile-evidence-footer">
+            <span>画像证据：{{ profileEvidenceText }}</span>
+            <span>缺少数据的维度保持待采集状态</span>
           </div>
         </div>
         <div v-else class="profile-empty-state">
-          完成一次学习对话或学习评价后，系统会自动生成十维动态画像。
+          完成一次学习对话后，系统会先记录目标和自述基础；练习、评价与路径执行会继续补全六项核心画像。
         </div>
       </el-card>
 
@@ -166,20 +197,20 @@
           </template>
           <div class="stats-box-quad-grid">
             <div class="quad-item">
-              <span class="quad-num">{{ userStore.hours || 0 }}</span>
+              <span class="quad-num">{{ profileStats.learning_hours }}</span>
               <span class="quad-label">累计学习(小时)</span>
             </div>
             <div class="quad-item">
-              <span class="quad-num">{{ isNewUser ? '0' : '15' }}</span>
+              <span class="quad-num">{{ profileStats.published_resources }}</span>
               <span class="quad-label">专属生成资源</span>
             </div>
             <div class="quad-item">
-              <span class="quad-num">{{ isNewUser ? '0%' : '92%' }}</span>
+              <span class="quad-num">{{ profileStats.knowledge_mastery }}%</span>
               <span class="quad-label">知识点掌握度</span>
             </div>
             <div class="quad-item">
-              <span class="quad-num">{{ isNewUser ? '0' : '3' }}</span>
-              <span class="quad-label">攻克易错错点</span>
+              <span class="quad-num">{{ profileStats.current_weak_points }}</span>
+              <span class="quad-label">当前易错点</span>
             </div>
           </div>
         </el-card>
@@ -225,11 +256,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import * as echarts from 'echarts' 
 import { getMyProfileAPI, submitFeedbackAPI, updateProfileAPI } from '@/api/user'
 
 const router = useRouter()
@@ -237,7 +267,12 @@ const userStore = useUserStore()
 
 const loading = ref(false)
 const avatarSaving = ref(false)
-let resizeHandler = null
+const profileStats = ref({
+  learning_hours: Number(userStore.hours || 0),
+  published_resources: 0,
+  knowledge_mastery: 0,
+  current_weak_points: 0
+})
 const MAX_AVATAR_FILE_SIZE = 3 * 1024 * 1024
 const AVATAR_OUTPUT_SIZE = 320
 
@@ -377,72 +412,148 @@ const handleUpdateProfile = async () => {
 
 const displayName = computed(() => userStore.nickname || userStore.username || '学伴新用户')
 const knowledgeTags = computed(() => userStore.tags || [])
-const radarLabels = [
-  '知识基础',
+const publicDimensionLabels = [
+  '当前知识水平',
   '学习目标',
-  '概念理解',
   '练习表现',
-  '实践能力',
-  '规划执行',
-  '复盘能力',
-  '易错修复',
-  '媒介偏好',
-  '兴趣方向'
+  '薄弱知识点',
+  '路径执行',
+  '资源偏好'
 ]
-const radarValues = computed(() => {
-  if (!userStore.profileRadar || Object.keys(userStore.profileRadar).length === 0) {
-    return radarLabels.map(() => 0)
-  }
-  return radarLabels.map(label => Number(userStore.profileRadar[label] || 0))
-})
-const hasProfileData = computed(() => {
-  const radar = userStore.profileRadar || {}
-  const dimensions = userStore.profileDimensions || {}
-  return Object.values(radar).some(value => Number(value) > 0) || Object.keys(dimensions).length > 0
-})
-// 判断当前是否真正没有画像数据，而不是按演示账号名硬编码判断
-const isNewUser = computed(() => !hasProfileData.value)
-const dimensionDescriptions = {
-  知识基础: '结合当前主题、同主题历史表现和近期综合学习证据估算。',
-  学习目标: '根据自然语言目标、规划需求、项目诉求和学习行为判断清晰度。',
-  概念理解: '由评价记录、主题定位、反馈表达清晰度和知识单元掌握情况共同计算。',
-  练习表现: '来自练习题作答、AI 批改、同主题练习均分和错因记录。',
-  实践能力: '反映代码实验、项目任务和动手训练的准备度。',
-  规划执行: '结合学习计划、待办任务和学习路径完成情况判断。',
-  复盘能力: '来自错因说明、评价记录、作答反馈和补弱记录。',
-  易错修复: '衡量薄弱点是否被练习、评价和补弱资源持续修复。',
-  媒介偏好: '根据图解、导图、文字、代码、练习等资源使用和表达偏好动态更新。',
-  兴趣方向: '概括近期关注知识点和数据结构与算法应用方向。'
+
+const splitProfileValues = (value) => {
+  return String(value || '')
+    .split(/[；;、，,\/]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .slice(0, 5)
 }
+
+const normalizePublicEntry = (label, entry = {}) => {
+  const fallbackKind = ['当前知识水平', '练习表现', '路径执行'].includes(label) ? 'score' : 'text'
+  const kind = entry.kind || fallbackKind
+  const rawValue = entry.value
+  const numericValue = kind === 'score' && rawValue !== null && rawValue !== '' && Number.isFinite(Number(rawValue))
+    ? Math.max(0, Math.min(100, Math.round(Number(rawValue))))
+    : null
+  const values = kind === 'tags'
+    ? (Array.isArray(rawValue) ? rawValue.filter(Boolean).slice(0, 5) : splitProfileValues(rawValue))
+    : []
+  return {
+    label,
+    kind,
+    value: numericValue,
+    values,
+    display: entry.display || (numericValue !== null ? `${numericValue} 分` : (values.join('、') || '待采集')),
+    status: entry.status || (numericValue !== null || values.length ? 'provisional' : 'pending'),
+    evidence: entry.evidence || '后续学习行为会补充该维度的证据。',
+    source: entry.source || 'none'
+  }
+}
+
+const legacyPublicDimensions = computed(() => {
+  const dimensions = userStore.profileDimensions || {}
+  const radar = userStore.profileRadar || {}
+  return {
+    当前知识水平: {
+      kind: 'score',
+      value: radar['当前知识水平'] ?? radar['知识基础'] ?? null,
+      display: dimensions['当前知识水平'] || dimensions['知识基础'] || '待有效作答诊断',
+      status: radar['当前知识水平'] !== undefined || radar['知识基础'] !== undefined ? 'provisional' : 'pending',
+      evidence: '历史画像已兼容保留，后续有效作答会替换为可追溯结果。'
+    },
+    学习目标: {
+      kind: 'text',
+      value: dimensions['学习目标'] || '',
+      display: dimensions['学习目标'] || '待确认',
+      status: dimensions['学习目标'] ? 'reported' : 'pending',
+      evidence: '从学生对话中提取课程主题和学习任务。'
+    },
+    练习表现: {
+      kind: 'score',
+      value: radar['练习表现'] ?? null,
+      display: dimensions['练习表现'] || '暂无有效作答',
+      status: radar['练习表现'] !== undefined ? 'provisional' : 'pending',
+      evidence: '完成可批改练习后更新。'
+    },
+    薄弱知识点: {
+      kind: 'tags',
+      value: splitProfileValues(dimensions['薄弱知识点'] || dimensions['易错修复']),
+      display: dimensions['薄弱知识点'] || dimensions['易错修复'] || '待练习诊断',
+      status: dimensions['薄弱知识点'] || dimensions['易错修复'] ? 'provisional' : 'pending',
+      evidence: '根据错题知识点、作答反馈和评价记录归纳。'
+    },
+    路径执行: {
+      kind: 'score',
+      value: radar['路径执行'] ?? radar['规划执行'] ?? null,
+      display: dimensions['路径执行'] || dimensions['规划执行'] || '尚无执行记录',
+      status: radar['路径执行'] !== undefined || radar['规划执行'] !== undefined ? 'provisional' : 'pending',
+      evidence: '根据当前主题的学习任务与待办完成情况统计。'
+    },
+    资源偏好: {
+      kind: 'tags',
+      value: splitProfileValues(dimensions['资源偏好'] || dimensions['媒介偏好']),
+      display: dimensions['资源偏好'] || dimensions['媒介偏好'] || '待确认',
+      status: dimensions['资源偏好'] || dimensions['媒介偏好'] ? 'provisional' : 'pending',
+      evidence: '优先采用学生主动表达，后续结合资源反馈校正。'
+    }
+  }
+})
+
+const publicDimensionItems = computed(() => {
+  const supplied = userStore.profilePublicDimensions || {}
+  const source = Object.keys(supplied).length ? supplied : legacyPublicDimensions.value
+  return publicDimensionLabels.map(label => normalizePublicEntry(label, source[label] || {}))
+})
+
+const quantitativeItems = computed(() => publicDimensionItems.value.filter(item => item.kind === 'score'))
+const descriptiveItems = computed(() => publicDimensionItems.value.filter(item => item.kind !== 'score'))
+const hasProfileData = computed(() => publicDimensionItems.value.some(item => item.status !== 'pending'))
+const isNewUser = computed(() => !hasProfileData.value)
+
 const dimensionColor = (value) => {
   if (value >= 85) return '#16a34a'
   if (value >= 70) return '#1890ff'
   if (value >= 55) return '#faad14'
   return '#f97316'
 }
-const dimensionItems = computed(() => {
-  return radarLabels.map((label, index) => {
-    const rawValue = Number(radarValues.value[index] || 0)
-    const value = Math.max(0, Math.min(100, Math.round(rawValue)))
-    return {
-      label,
-      value,
-      color: dimensionColor(value),
-      description: dimensionDescriptions[label]
-    }
-  })
+
+const statusText = (status) => ({
+  observed: '行为证据',
+  reported: '学生自述',
+  provisional: '历史兼容',
+  pending: '待采集'
+}[status] || '待采集')
+
+const statusType = (status) => ({
+  observed: 'success',
+  reported: 'primary',
+  provisional: 'warning',
+  pending: 'info'
+}[status] || 'info')
+
+const publicEntry = (label) => publicDimensionItems.value.find(item => item.label === label)
+const profileEvidenceText = computed(() => {
+  const evidence = userStore.profileEvidenceSummary || {}
+  const count = Number(evidence.evidence_count || 0)
+  const confidence = Number(evidence.confidence_score || 0)
+  if (!count) return '当前以对话自述为主，等待有效作答'
+  return `${count} 条有效记录${confidence ? `，证据置信度 ${confidence}%` : ''}`
 })
+
 const profileAdvice = computed(() => {
-  const dimensions = userStore.profileDimensions || {}
+  const goal = publicEntry('学习目标')
+  const preference = publicEntry('资源偏好')
+  const weakness = publicEntry('薄弱知识点')
   return {
-    style: dimensions['媒介偏好'] || '待学习数据生成',
-    weakness: dimensions['易错修复'] || '待学习评价生成',
-    next: dimensions['学习目标'] ? `围绕「${dimensions['学习目标']}」生成下一轮学习资源与路径。` : '完成学习对话或评价后，系统将生成下一轮学习资源与路径。'
+    style: preference?.display || '待确认',
+    weakness: weakness?.display || '待练习诊断',
+    next: goal?.status !== 'pending' ? `围绕「${goal.display}」安排下一轮资源与学习任务。` : '完成学习对话或评价后，系统将生成下一轮学习资源与路径。'
   }
 })
 
 const applyProfileSnapshot = (profile) => {
-  if (profile && (profile.dimensions || profile.radar || profile.knowledge_tags || profile.tags)) {
+  if (profile && (profile.public_dimensions || profile.dimensions || profile.radar || profile.knowledge_tags || profile.tags)) {
     userStore.updateLearningProfile(profile)
   }
 }
@@ -452,6 +563,12 @@ const refreshLearningProfile = async () => {
   try {
     const res = await getMyProfileAPI(userStore.username)
     applyProfileSnapshot(res?.data?.profile)
+    profileStats.value = {
+      learning_hours: Number(res?.data?.stats?.learning_hours ?? res?.data?.profile?.hours ?? userStore.hours ?? 0),
+      published_resources: Number(res?.data?.stats?.published_resources || 0),
+      knowledge_mastery: Number(res?.data?.stats?.knowledge_mastery || 0),
+      current_weak_points: Number(res?.data?.stats?.current_weak_points || 0)
+    }
   } catch (error) {
     console.error('画像刷新失败:', error)
   }
@@ -459,7 +576,6 @@ const refreshLearningProfile = async () => {
 
 const handleLearningProfileUpdated = (event) => {
   applyProfileSnapshot(event?.detail)
-  nextTick(() => initRadarChart())
 }
 
 const padTime = (value) => String(value).padStart(2, '0')
@@ -587,58 +703,13 @@ const handleLogout = () => {
   router.push('/')
 }
 
-// ================= ECharts 雷达图渲染内核 =================
-const radarChartRef = ref(null)
-let myChart = null
-
-const initRadarChart = () => {
-  if (!radarChartRef.value) return
-  if (!myChart) {
-    myChart = echarts.init(radarChartRef.value)
-  }
-  
-  const option = {
-    radar: {
-      indicator: radarLabels.map(name => ({ name, max: 100 })),
-      shape: 'polygon',
-      splitNumber: 5,
-      axisName: { color: '#333', fontSize: 13, fontWeight: 'bold' },
-      splitLine: { lineStyle: { color: 'rgba(24, 144, 255, 0.15)' } },
-      splitArea: { areaStyle: { color: ['#fff', '#f9fafb'] } },
-      axisLine: { lineStyle: { color: 'rgba(24, 144, 255, 0.2)' } }
-    },
-    series: [{
-      type: 'radar',
-      data: hasProfileData.value ? [{
-        value: radarValues.value,
-        name: '学情全息动态画像',
-        areaStyle: { color: 'rgba(24, 144, 255, 0.25)' },
-        lineStyle: { color: '#1890ff', width: 2 },
-        itemStyle: { color: '#1890ff' }
-      }] : []
-    }]
-  }
-  myChart.clear()
-  myChart.setOption(option)
-}
-
 onMounted(async () => {
   await refreshLearningProfile()
-  initRadarChart()
-  resizeHandler = () => myChart && myChart.resize()
-  window.addEventListener('resize', resizeHandler)
   window.addEventListener('lingxi-profile-updated', handleLearningProfileUpdated)
 })
 
 onUnmounted(() => {
-  if (resizeHandler) {
-    window.removeEventListener('resize', resizeHandler)
-  }
   window.removeEventListener('lingxi-profile-updated', handleLearningProfileUpdated)
-})
-
-watch([radarValues, hasProfileData], () => {
-  initRadarChart()
 })
 </script>
 
@@ -820,51 +891,129 @@ watch([radarValues, hasProfileData], () => {
   color: #52c41a; 
 }
 
-/* 雷达图尺寸容器 */
-.radar-chart-container { height: 300px; width: 100%; }
-
-.dimension-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 8px;
+.profile-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.dimension-tile {
-  padding: 10px 12px;
-  border: 1px solid #eef2f7;
+.profile-core-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.profile-method-note {
+  margin: 0;
+  padding: 11px 13px;
+  border-left: 3px solid #409eff;
+  background: #f2f8ff;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.quantitative-section,
+.descriptive-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quantitative-section h3,
+.descriptive-section h3 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.metric-row {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.metric-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.metric-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.metric-heading span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.metric-heading strong {
+  color: #1677ff;
+  font-size: 18px;
+}
+
+.metric-heading small {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.metric-row p,
+.profile-fact-row p {
+  margin: 7px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.profile-fact-row {
+  padding: 11px 12px;
+  border: 1px solid #e7edf5;
   border-radius: 8px;
   background: #fbfdff;
 }
 
-.dimension-head {
+.fact-label {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 7px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
-.dimension-head span {
-  min-width: 0;
-  color: #1f2937;
+.fact-label > span {
+  color: #334155;
   font-size: 13px;
-  font-weight: 700;
-  line-height: 1.35;
+  font-weight: 650;
 }
 
-.dimension-head strong {
-  flex-shrink: 0;
-  color: #1677ff;
-  font-size: 17px;
-  line-height: 1;
+.fact-value {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
-.dimension-tile p {
-  margin: 7px 0 0;
+.fact-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.profile-evidence-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eef2f7;
   color: #64748b;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .profile-empty-state {

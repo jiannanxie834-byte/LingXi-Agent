@@ -1,6 +1,5 @@
 import request from '@/utils/request'
-
-export const SHOW_AGENT_TRACE = String(import.meta.env.VITE_SHOW_AGENT_TRACE || 'false') === 'true'
+import { sanitizePublicPayload, sanitizePublicText } from '@/utils/publicContent'
 
 export const LEARNING_ROUTE_TYPES = new Set([
   'new_learning_request',
@@ -13,6 +12,7 @@ export const LEARNING_ROUTE_TYPES = new Set([
 ])
 
 export const PLAIN_ROUTE_TYPES = new Set([
+  'plain_qa',
   'acknowledgement',
   'clarification',
   'clarification_needed',
@@ -75,7 +75,7 @@ const stripInternalFields = (value) => {
         .map(([key, item]) => [key, stripInternalFields(item)])
     )
   }
-  return value
+  return typeof value === 'string' ? sanitizePublicText(value) : value
 }
 
 const normalizeProgress = (progress = []) => {
@@ -94,17 +94,27 @@ export const normalizeStudentChatData = (response) => {
   const routeType = data.route_type || data.routeType || ''
   const isPlain = PLAIN_ROUTE_TYPES.has(routeType) || message.content_type === 'conversation_reply'
   const allowLearningDisplay = !isPlain && (LEARNING_ROUTE_TYPES.has(routeType) || (!routeType && message.content_type !== 'conversation_reply'))
+  const resourceStatus = allowLearningDisplay
+    ? stripInternalFields(data.resource_status || {})
+    : {}
 
   return {
-    content: message.content || data.reply || '',
+    content: sanitizePublicText(message.content || data.reply || ''),
     contentType: message.content_type || 'student_answer',
     routeType,
     progress: allowLearningDisplay ? normalizeProgress(data.progress || []) : [],
     cards: allowLearningDisplay ? stripInternalFields(data.cards || []) : [],
-    traceId: SHOW_AGENT_TRACE && !isPlain ? data.trace_id || '' : '',
+    generationJob: resourceStatus.job_id ? {
+      jobId: resourceStatus.job_id,
+      status: resourceStatus.status || 'queued',
+      progress: 0,
+      message: sanitizePublicText(resourceStatus.message) || '已创建资源生成任务',
+      events: []
+    } : null,
+    traceId: '',
     sessionId: data.session_id || '',
     session: data.session || null,
-    profile: isPlain ? null : data.profile || null,
+    profile: isPlain ? null : sanitizePublicPayload(data.profile || null),
     messageId: data.message_id || data.assistant_message_id || '',
     userMessageId: data.user_message_id || ''
   }

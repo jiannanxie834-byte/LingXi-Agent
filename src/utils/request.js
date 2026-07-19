@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { publicErrorMessage, sanitizePublicPayload } from '@/utils/publicContent'
 
 // 1. 创建 axios 实例
 const service = axios.create({
@@ -29,15 +30,16 @@ service.interceptors.response.use(
 
     // 只要后端返回 200，说明业务成功，原封不动把大包裹还给组件！
     if (res.code === 200) {
-      return res
+      return sanitizePublicPayload(res)
     } else {
       // 后端返回了非 200 的业务报错
-      ElMessage.error(res.message || '系统遇到了一点小状况')
-      return Promise.reject(new Error(res.message || 'Error'))
+      const message = publicErrorMessage(res.message)
+      ElMessage.error(message)
+      return Promise.reject(new Error(message))
     }
   },
   error => {
-    console.error('网络请求崩溃:', error)
+    console.error('网络请求失败')
     ElMessage.error('网络中断，请检查后端服务是否开启')
     return Promise.reject(error)
   }

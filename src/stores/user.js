@@ -9,6 +9,8 @@ export const useUserStore = defineStore('user', () => {
   const avatar = ref(sessionStorage.getItem('avatar') || '')
   const hours = ref(Number(sessionStorage.getItem('hours') || 0))
   const profileDimensions = ref({})
+  const profilePublicDimensions = ref({})
+  const profileEvidenceSummary = ref({})
   const profileRadar = ref({})
   const profileUpdatedAt = ref(sessionStorage.getItem('profileUpdatedAt') || '')
 
@@ -38,10 +40,16 @@ export const useUserStore = defineStore('user', () => {
     if (rawDimensions) profileDimensions.value = JSON.parse(rawDimensions)
     const rawRadar = sessionStorage.getItem('profileRadar')
     if (rawRadar) profileRadar.value = JSON.parse(rawRadar)
+    const rawPublicDimensions = sessionStorage.getItem('profilePublicDimensions')
+    if (rawPublicDimensions) profilePublicDimensions.value = JSON.parse(rawPublicDimensions)
+    const rawEvidenceSummary = sessionStorage.getItem('profileEvidenceSummary')
+    if (rawEvidenceSummary) profileEvidenceSummary.value = JSON.parse(rawEvidenceSummary)
   } catch (error) {
     console.error('画像数据解析失败:', error)
     sessionStorage.removeItem('profileDimensions')
     sessionStorage.removeItem('profileRadar')
+    sessionStorage.removeItem('profilePublicDimensions')
+    sessionStorage.removeItem('profileEvidenceSummary')
   }
 
   // ================= 2. 核心动作 (Actions) =================
@@ -83,6 +91,8 @@ export const useUserStore = defineStore('user', () => {
     role.value = '' // 剥夺身份
     tags.value = []
     profileDimensions.value = {}
+    profilePublicDimensions.value = {}
+    profileEvidenceSummary.value = {}
     profileRadar.value = {}
     profileUpdatedAt.value = ''
     bio.value = '这个人十分神秘，什么都没留下哟'
@@ -122,6 +132,14 @@ export const useUserStore = defineStore('user', () => {
       profileDimensions.value = profile.dimensions
       sessionStorage.setItem('profileDimensions', JSON.stringify(profileDimensions.value))
     }
+    if (profile.public_dimensions && typeof profile.public_dimensions === 'object') {
+      profilePublicDimensions.value = profile.public_dimensions
+      sessionStorage.setItem('profilePublicDimensions', JSON.stringify(profilePublicDimensions.value))
+    }
+    if (profile.evidence_summary && typeof profile.evidence_summary === 'object') {
+      profileEvidenceSummary.value = profile.evidence_summary
+      sessionStorage.setItem('profileEvidenceSummary', JSON.stringify(profileEvidenceSummary.value))
+    }
     if (profile.radar && typeof profile.radar === 'object') {
       profileRadar.value = profile.radar
       sessionStorage.setItem('profileRadar', JSON.stringify(profileRadar.value))
@@ -138,6 +156,8 @@ export const useUserStore = defineStore('user', () => {
     avatar,
     hours,
     profileDimensions,
+    profilePublicDimensions,
+    profileEvidenceSummary,
     profileRadar,
     profileUpdatedAt,
     role,

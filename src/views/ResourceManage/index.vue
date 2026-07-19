@@ -6,7 +6,7 @@
       <div class="quick-review-panel">
         <div>
           <strong>演示快速审核</strong>
-          <p>按学生账号通过最近待审核 Artifact，保留教师审核动作，便于演示资源进入学生端资源工厂。</p>
+          <p>按学生账号通过最近待审核资源，保留教师审核动作，便于演示资源进入学生端资源工厂。</p>
         </div>
         <div class="quick-review-actions">
           <el-input
@@ -210,11 +210,6 @@
           <p>{{ selectedResource.review_comment }}</p>
         </div>
         <MarkdownRenderer :content="selectedResource.content || '暂无正文内容'" />
-        <el-collapse class="debug-collapse">
-          <el-collapse-item title="调试信息（默认收起）" name="debug">
-            <pre>{{ debugText(selectedResource) }}</pre>
-          </el-collapse-item>
-        </el-collapse>
       </div>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
@@ -348,22 +343,6 @@ const currentTypeList = computed(() => {
   const status = typeStatusMap[activeTypeStatus.value]?.status || '待审核'
   return typesByStatus(status)
 })
-
-const debugText = (resource = {}) => {
-  const debugInfo = {
-    resource_id: resource.id || resource.resource_id || '',
-    chapter: resource.chapter_title || resource.chapter_id || '',
-    content_length: plainTextLength(resource.content),
-    question_count: questionCount(resource.content) || 0,
-    safety_review: resource.safety_review || {},
-    teaching_quality_review: resource.teaching_quality_review || {},
-    evidence_review: resource.evidence_review || {},
-    source: resource.source || '',
-    agent_notes: resource.agent_notes || '',
-    agent_trace_id: resource.agent_trace_id || ''
-  }
-  return JSON.stringify(debugInfo, null, 2)
-}
 
 const riskTagType = (riskLevel) => {
   if (riskLevel === '高风险') return 'danger'
@@ -1024,7 +1003,6 @@ onMounted(async () => {
   font-size: 12px;
   line-height: 1.45;
 }
-.agent-notes { margin: 12px 0 18px; padding: 10px 12px; border-left: 4px solid #409eff; background: #ecf5ff; color: #1f4e79; line-height: 1.6; }
 :deep(.resource-table .el-table__cell),
 :deep(.type-review-table .el-table__cell) {
   vertical-align: top;

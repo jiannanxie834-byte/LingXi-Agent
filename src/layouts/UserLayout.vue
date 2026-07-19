@@ -90,7 +90,7 @@
       <div :class="{ 'active': currentPath === '/' }" @click="goPage('/')">首页</div>
       <div :class="{ 'active': currentPath === '/resource' }" @click="goPage('/resource')">资源工厂</div>
       <div :class="{ 'active': currentPath === '/plan' }" @click="goPage('/plan')">规划</div>
-      <div :class="{ 'active': currentPath === '/evaluation' }" @click="goPage('/evaluation')">评价</div>
+      <div :class="{ 'active': currentPath === '/evaluation' }" @click="goPage('/evaluation')">学习诊断</div>
       <div :class="{ 'active': currentPath === '/profile' }" @click="goPage('/profile')">我的</div>
     </div>
   </div>

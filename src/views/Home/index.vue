@@ -112,7 +112,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted } from 'vue'
+import { ref, reactive, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import ChatMessage from '@/components/ChatWindow/ChatMessage.vue'
@@ -124,6 +124,7 @@ import {
   normalizeStudentChatData,
   sendChatMessageAPI
 } from '@/api/chat'
+import { getGenerationJobAPI, getGenerationJobEventsAPI } from '@/api/generation'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -154,44 +155,97 @@ const currentUsername = () => userStore.username || 'student'
 
 const activeSessionStorageKey = () => `lingxi_active_chat_${currentUsername()}`
 
-const createPendingProgress = () => [
-  { key: 'understand', label: '理解需求', status: 'running' },
-  { key: 'collect', label: '整理资料', status: 'pending' },
-  { key: 'profile', label: '更新画像', status: 'pending' },
-  { key: 'answer', label: '生成建议', status: 'pending' },
-  { key: 'plan', label: '生成路线', status: 'pending' },
-  { key: 'resources', label: '整理资源', status: 'pending' },
-  { key: 'check', label: '完成检查', status: 'pending' }
+const GENERATION_STAGES = [
+  { key: 'created', label: '创建生成任务', progress: 0 },
+  { key: 'grounding', label: '匹配课程资料', progress: 20 },
+  { key: 'generating', label: '生成配套资源', progress: 45 },
+  { key: 'quality', label: '质量与安全检查', progress: 75 },
+  { key: 'saved', label: '保存资源并通知', progress: 100 }
 ]
 
-let progressTimer = null
+const TERMINAL_JOB_STATUS = new Set(['completed', 'partial_success', 'failed'])
+const jobPollers = new Map()
 
-const clearProgressTimer = () => {
-  if (progressTimer) {
-    clearInterval(progressTimer)
-    progressTimer = null
-  }
-}
+const wait = (duration) => new Promise(resolve => window.setTimeout(resolve, duration))
 
-const startProgressSimulation = (aiMsg) => {
-  clearProgressTimer()
-  let activeIndex = 0
-  progressTimer = setInterval(() => {
-    const steps = aiMsg.progress || []
-    if (!steps.length || activeIndex >= steps.length - 1) {
-      return
+const buildGenerationStages = (events = [], job = {}) => {
+  const eventList = Array.isArray(events) ? events : []
+  const observedProgress = Math.max(
+    Number(job.progress || 0),
+    ...eventList.map(item => Number(item.progress || 0))
+  )
+  const isTerminal = TERMINAL_JOB_STATUS.has(job.status)
+
+  return GENERATION_STAGES.map((stage, index) => {
+    const nextProgress = GENERATION_STAGES[index + 1]?.progress ?? 101
+    const event = eventList.find(item => Number(item.progress) === stage.progress)
+      || eventList.filter(item => Number(item.progress) >= stage.progress).at(-1)
+    let status = 'pending'
+    if (isTerminal && job.status !== 'failed') status = 'completed'
+    else if (job.status === 'failed' && stage.progress === 100) status = 'failed'
+    else if (observedProgress >= nextProgress) status = 'completed'
+    else if (observedProgress >= stage.progress) status = 'running'
+
+    return {
+      ...stage,
+      status,
+      message: event?.message || (stage.progress === 100 ? job.message || '' : '')
     }
-    steps[activeIndex].status = 'completed'
-    activeIndex += 1
-    steps[activeIndex].status = 'running'
-  }, 850)
+  })
 }
 
-const completePendingSteps = (steps = []) => {
-  return steps.map(step => ({
-    ...step,
-    status: step.status === 'pending' || step.status === 'running' ? 'completed' : step.status
-  }))
+const stopJobPolling = (jobId) => {
+  const controller = jobPollers.get(jobId)
+  if (controller) controller.cancelled = true
+  jobPollers.delete(jobId)
+}
+
+const trackGenerationJob = async (message, jobId, onFirstUpdate = null) => {
+  if (!jobId) return
+  stopJobPolling(jobId)
+  const controller = { cancelled: false }
+  jobPollers.set(jobId, controller)
+  let firstUpdateNotified = false
+  const notifyFirstUpdate = () => {
+    if (firstUpdateNotified) return
+    firstUpdateNotified = true
+    onFirstUpdate?.()
+  }
+
+  try {
+    while (!controller.cancelled) {
+      const [jobResponse, eventResponse] = await Promise.all([
+        getGenerationJobAPI(jobId),
+        getGenerationJobEventsAPI(jobId)
+      ])
+      const job = jobResponse?.data || {}
+      const events = eventResponse?.data || []
+      const observedProgress = Math.max(
+        Number(job.progress || 0),
+        ...events.map(item => Number(item.progress || 0))
+      )
+      message.generationJob = {
+        jobId,
+        status: job.status || 'queued',
+        progress: observedProgress,
+        message: job.message || '正在生成个性化学习资源',
+        artifacts: job.artifacts || [],
+        events,
+        stages: buildGenerationStages(events, job)
+      }
+      notifyFirstUpdate()
+      if (TERMINAL_JOB_STATUS.has(job.status)) break
+      await wait(1200)
+    }
+  } catch (error) {
+    console.error('读取资源生成进度失败:', error)
+    if (message.generationJob) {
+      message.generationJob.message = '进度暂时无法刷新，后台任务仍会继续执行'
+    }
+    notifyFirstUpdate()
+  } finally {
+    jobPollers.delete(jobId)
+  }
 }
 
 // =========================
@@ -254,12 +308,27 @@ const loadSessionMessages = async (session) => {
           routeType: normalized.routeType,
           progress: normalized.progress,
           cards: normalized.cards,
-          traceId: normalized.traceId,
+          generationJob: normalized.generationJob,
           isPending: false
         }
       })
       messageList.value = messages.length ? messages : [{ ...welcomeMessage }]
-      await scrollToBottom()
+      // 轮询必须更新 messageList 中的 Vue 响应式对象；直接修改上面的原始数组不会触发历史消息界面刷新。
+      const jobMessages = messageList.value.filter(item => item.generationJob?.jobId)
+      if (!jobMessages.length) {
+        await scrollToBottom()
+      } else {
+        let pendingInitialUpdates = jobMessages.length
+        const handleInitialJobUpdate = () => {
+          pendingInitialUpdates -= 1
+          if (pendingInitialUpdates === 0 && activeSessionId.value === session.id) {
+            scrollToBottom()
+          }
+        }
+        jobMessages.forEach(item => {
+          trackGenerationJob(item, item.generationJob.jobId, handleInitialJobUpdate)
+        })
+      }
     }
   } catch (error) {
     console.error('加载历史对话失败:', error)
@@ -339,7 +408,11 @@ const restoreLastSession = async () => {
 // 滚动到底部
 // =========================
 const scrollToBottom = async () => {
-
+  await nextTick()
+  // 打开对话时，等待 Markdown 与首轮任务状态卡片完成布局后只定位一次。
+  // 后续回复和进度轮询不会再调用这里，因此不会抢走用户的阅读位置。
+  await new Promise(resolve => window.requestAnimationFrame(resolve))
+  await wait(250)
   await nextTick()
 
   const container = document.querySelector('.messages')
@@ -378,8 +451,6 @@ const sendMessage = async () => {
   // 锁定发送
   isSending.value = true
 
-  await scrollToBottom()
-
   // =========================
   // 2. 添加 AI 占位消息
   // =========================
@@ -389,15 +460,13 @@ const sendMessage = async () => {
     content: '正在整理学习建议...',
     contentType: 'student_answer',
     routeType: '',
-    progress: createPendingProgress(),
+    progress: [],
     cards: [],
+    generationJob: null,
     isPending: true
   })
 
   messageList.value.push(aiMsg)
-  startProgressSimulation(aiMsg)
-
-  await scrollToBottom()
 
   try {
 
@@ -430,7 +499,7 @@ const sendMessage = async () => {
       ? resultData.progress
       : []
     aiMsg.cards = resultData.cards || []
-    aiMsg.traceId = resultData.traceId || ''
+    aiMsg.generationJob = resultData.generationJob
     aiMsg.isPending = false
     if (resultData.messageId) {
       aiMsg.id = resultData.messageId
@@ -449,6 +518,10 @@ const sendMessage = async () => {
       chatSessions.value = [resultData.session, ...nextSessions]
     } else {
       await refreshChatSessions()
+    }
+
+    if (aiMsg.generationJob?.jobId) {
+      trackGenerationJob(aiMsg, aiMsg.generationJob.jobId)
     }
 
     // =========================
@@ -482,17 +555,20 @@ const sendMessage = async () => {
 
   } finally {
 
-    clearProgressTimer()
-
     // 解锁
     isSending.value = false
-
-    await scrollToBottom()
   }
 }
 
 onMounted(() => {
   restoreLastSession()
+})
+
+onUnmounted(() => {
+  jobPollers.forEach(controller => {
+    controller.cancelled = true
+  })
+  jobPollers.clear()
 })
 </script>
 
