@@ -137,7 +137,7 @@ const handleLogin = async () => {
       }
         userStore.login(userData)
       
-        ElMessage.success(`欢迎进入数据结构与算法智能学习舱，${userData.username}！`)
+        ElMessage.success(`欢迎使用灵析学伴，${userData.username}`)
         router.push(userData.role === 'admin' ? '/admin/dashboard' : '/') 
       }
     } catch (error) {
@@ -156,14 +156,14 @@ const handleRegister = async () => {
     try {
       loading.value = true
       
-      // 真实呼叫后端注册接口
+      // 调用后端注册接口
       await registerAPI({
         username: registerForm.value.username,
         nickname: registerForm.value.nickname,
         password: registerForm.value.password
       })
       
-      ElMessage.success(' 注册成功！已自动为您切换到登录界面')
+      ElMessage.success('注册成功，已切换到登录界面')
       loginForm.value.username = registerForm.value.username
       isLoginMode.value = true 
     } catch (error) {
@@ -220,7 +220,7 @@ const handleRegister = async () => {
 .logo-box h2 { margin: 0 0 6px 0; color: #333; }
 .logo-box p { margin: 0; color: #8c8c8c; font-size: 13px; }
 
-/* 切换 Tab 的精美设计 */
+/* 登录与注册页签 */
 .mode-toggle {
   display: flex;
   justify-content: space-around;

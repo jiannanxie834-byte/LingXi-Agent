@@ -64,12 +64,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Odometer, Files, User, ChatLineSquare } from '@element-plus/icons-vue'
 
-//  1. 引入 Pinia 用户状态中心
+// 用户状态
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore() // 2. 实例化 Store
+const userStore = useUserStore()
 
 // 动态激活高亮菜单
 const activeMenu = computed(() => route.path)
@@ -85,11 +85,11 @@ const pageTitle = computed(() => {
   return map[route.path] || '管理中心'
 })
 
-//  3. 彻底重写退出逻辑，断掉所有前朝残留缓存
+// 退出管理端并清除登录会话
 const handleLogout = () => {
-  userStore.logout() // 一刀切断 Local Storage 里的 token 和 admin 信息
+  userStore.logout()
   ElMessage.warning('管理员已安全退出管理后台')
-  router.push('/') //  退出后安全踢回主页，彻底闭环
+  router.push('/')
 }
 </script>
 

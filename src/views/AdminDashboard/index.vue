@@ -3,7 +3,7 @@
     <div class="welcome-box">
       <h3> 欢迎回来，超级管理员</h3>
       <p>
-        系统大盘数据实时通电中，当前有
+        系统统计数据已更新，当前有
         <el-tag type="danger" size="small" effect="dark">{{ todoCount }}</el-tag>
         项核心待办事件需要处理。
         <span class="todo-breakdown">
@@ -47,7 +47,7 @@ import { getAdminStatsAPI } from '@/api/admin'
 
 const router = useRouter()
 
-// 1.  固化控制台卡片皮肤和骨架，对应当前 HTML 模板
+// 控制台卡片配置
 const statsCards = ref([
   { title: '全站注册总数', value: '0 人', tag: '活跃学生', bgColor: '#e6f7ff', color: '#1890ff', route: { path: '/admin/user' } },
   { title: '知识库储备总数', value: '0 份', tag: '资源工厂', bgColor: '#f6ffed', color: '#52c41a', route: { path: '/admin/resource', query: { section: 'resources' } } },
@@ -66,7 +66,7 @@ const goStatTarget = (item) => {
   if (item.route) router.push(item.route)
 }
 
-// 2. 重新拉取大盘活数据
+// 加载控制台统计数据
 const fetchDashboardData = async () => {
   try {
     const res = await getAdminStatsAPI()
@@ -94,7 +94,7 @@ const fetchDashboardData = async () => {
       console.error('大盘数据异常:', res.message)
     }
   } catch (error) {
-    console.error('大盘加载彻底失败:', error)
+    console.error('控制台统计加载失败:', error)
   }
 }
 

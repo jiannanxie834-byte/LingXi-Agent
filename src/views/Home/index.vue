@@ -452,7 +452,7 @@ const sendMessage = async () => {
   isSending.value = true
 
   // =========================
-  // 2. 添加 AI 占位消息
+  // 2. 添加加载状态消息
   // =========================
   const aiMsg = reactive({
     localId: `local_ai_${Date.now()}`,
@@ -480,17 +480,17 @@ const sendMessage = async () => {
     })
 
     // =========================
-    // 4. 提取 AI 回复
+    // 4. 处理后端回复
     // =========================
     const resultData = normalizeStudentChatData(res)
     const reply = resultData.content
 
     if (!reply) {
-      throw new Error('AI未返回有效内容')
+      throw new Error('服务未返回有效内容')
     }
 
     // =========================
-    // 5. 替换“思考中...”
+    // 5. 用正式回复替换加载状态
     // =========================
     aiMsg.content = reply
     aiMsg.contentType = resultData.contentType || 'student_answer'

@@ -32,8 +32,8 @@
               <button class="inline-add-btn" @click="insertTask(pIndex, 0)">+ 插入首个任务</button>
             </div>
             <el-popconfirm 
-                title="确定要彻底销毁整条学习路线吗？此操作不可逆！" 
-                confirm-button-text="销毁" 
+                title="确定删除整条学习路线吗？删除后无法恢复。"
+                confirm-button-text="删除"
                 cancel-button-text="取消"
                 confirm-button-type="danger"
                 @confirm="handleDeleteRoute(plan.id)"
@@ -125,7 +125,7 @@
             </svg>
           </div>
           <div class="progress-info">
-            <p>已击破核心知识点比例</p>
+            <p>路径任务完成比例</p>
           </div>
         </div>
 
@@ -163,7 +163,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-//  1. 精准导入 API 文件里真实暴露的名字
+// 学习路线与自主任务接口
 import { getPlanListAPI, deleteRouteAPI, savePlanAPI } from '@/api/plan'
 import { getTodoListAPI, saveTodoAPI } from '@/api/todo'
 import { getResourceArtifactAPI } from '@/api/resource'
@@ -174,22 +174,22 @@ const userStore = useUserStore()
 const router = useRouter()
 const loading = ref(false)
 
-//  2. 核心状态：彻底清空写死的数据，等待后端投喂！
+// 学习路线状态
 const plans = ref([])
 
-// 独立自定义任务数组 (属于本地功能，暂时保留)
+// 独立自主任务列表
 const myTasks = ref([])
 const routeEditorVisible = ref(false)
 const editingPlanIndex = ref(-1)
 const editingPlanDraft = ref(null)
 
-//  3. 初始化拉取：页面一加载就去轰鸣后端
+// 页面初始化时加载路线与自主任务
 onMounted(() => {
   fetchPlansData()
   fetchTodoData()
 })
 
-//  4. 重新拉取活数据的通用函数
+// 重新加载路线数据
 const fetchPlansData = async () => {
   loading.value = true
   try {
@@ -297,20 +297,20 @@ const normalizePlan = (plan = {}) => {
   return normalized
 }
 
-//  5. 删除整条路线
+// 删除整条路线
 const handleDeleteRoute = async (routeId) => {
   try {
     const res = await deleteRouteAPI(userStore.username, routeId)
     if (res && res.code === 200) {
       ElMessage.success('学习路线已删除')
-      fetchPlansData() // 删完立刻重新拉取，刷新视图
+      fetchPlansData()
     }
   } catch (error) {
     console.error('删除路线失败:', error)
   }
 }
 
-//  6.剥离单个任务节点 (替换掉你之前的 deleteStep)
+// 删除单个任务节点
 const confirmAction = async (message, title = '提示') => {
   try {
     await ElMessageBox.confirm(message, title, {
@@ -344,16 +344,15 @@ const deleteStep = async (planIndex, stepIndex) => {
   const confirmed = await confirmAction('确定要删除这条路线中的该任务吗？')
   if (!confirmed) return
   plans.value[planIndex].tasks.splice(stepIndex, 1)
-  await persistPlans('任务节点已成功剥离！')
+  await persistPlans('任务已删除')
 }
 
-// 切换规划路线的收缩状态 (纯前端 UI 控制，无需连后端)
+// 切换路线折叠状态
 const togglePlan = (index) => {
   plans.value[index].isCollapsed = !plans.value[index].isCollapsed
 }
 
-// 【提醒】新增路线和插入任务目前是纯前端操作，刷新会丢失。
-// 等 AI 接口调通后，这部分也会变成真实 API 交互！
+// 新增路线和插入任务后统一持久化
 const createNewPlan = async () => {
   const title = await promptText('请输入新规划的名称', '新增自主规划路线', {
     placeholder: '如：监督学习复习路线'
@@ -638,7 +637,7 @@ const saveRouteEditor = async (draft) => {
 }
 .timeline-body:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 
-/* 学生自己加的路线任务底色稍作区别，彰显个性化修改 */
+/* 学生自建任务使用独立底色 */
 .is-student-added .timeline-body { border-left: 4px solid #f6d365; background: #fffdf9; }
 .custom-badge { background: #fff7e6; color: #fa8c16; font-size: 11px; padding: 1px 4px; border-radius: 3px; margin-right: 6px; }
 
@@ -671,7 +670,7 @@ const saveRouteEditor = async (draft) => {
   border-color: #e2e8f0;
 }
 
-/* 🌟 插针区域：隐藏在两个任务之间，鼠标悬浮时高亮显示 */
+/* 任务插入区域在悬浮时显示 */
 .insert-trigger-zone {
   position: absolute; bottom: -18px; left: 0; width: 100%;
   display: flex; justify-content: center; z-index: 10; opacity: 0;

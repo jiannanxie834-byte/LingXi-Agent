@@ -14,7 +14,7 @@ export const useUserStore = defineStore('user', () => {
   const profileRadar = ref({})
   const profileUpdatedAt = ref(sessionStorage.getItem('profileUpdatedAt') || '')
 
-  //   1：补上角色状态，这关系到你的管理员任意门！
+  // 用户角色，用于区分学生端与管理端权限
   const role = ref(sessionStorage.getItem('role') || '')
 
   const bio = ref(sessionStorage.getItem('bio') || '')
@@ -54,7 +54,7 @@ export const useUserStore = defineStore('user', () => {
 
   // ================= 2. 核心动作 (Actions) =================
 
-  // 登录动作：完全信任并接收后端吐出的数据包 (userInfo)
+  // 保存后端返回的登录用户信息
   const login = (userInfo) => {
     token.value = userInfo.token || ''
     username.value = userInfo.username || ''
@@ -63,14 +63,14 @@ export const useUserStore = defineStore('user', () => {
     hours.value = Number(userInfo.hours || 0)
     tags.value = userInfo.tags || []
 
-    //  2：接收后端的 role
+    // 保存用户角色
     role.value = userInfo.role || 'student'
 
     bio.value = userInfo.bio || ''
 
     isLoggedIn.value = true
 
-    //  统一存入 Session
+    // 统一写入会话存储
     sessionStorage.setItem('token', token.value)
     sessionStorage.setItem('username', username.value)
     sessionStorage.setItem('nickname', nickname.value)
@@ -81,7 +81,7 @@ export const useUserStore = defineStore('user', () => {
     sessionStorage.setItem('tags', JSON.stringify(tags.value))
   }
 
-  // 退出登录：物理级清空
+  // 清除登录会话
   const logout = () => {
     token.value = ''
     username.value = ''

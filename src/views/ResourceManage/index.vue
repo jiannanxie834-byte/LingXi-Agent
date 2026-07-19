@@ -6,7 +6,7 @@
       <div class="quick-review-panel">
         <div>
           <strong>演示快速审核</strong>
-          <p>按学生账号通过最近待审核资源，保留教师审核动作，便于演示资源进入学生端资源工厂。</p>
+          <p>按学生账号批量审核最近生成的待审核资源，审核通过后同步开放至学生端。</p>
         </div>
         <div class="quick-review-actions">
           <el-input
@@ -452,7 +452,7 @@ const askReviewComment = async ({ title, message, defaultValue = '' }) => {
   }
 }
 
-// 拉取活数据
+// 加载资源数据
 const loadAllReviewData = async () => {
   loading.value = true
   try {

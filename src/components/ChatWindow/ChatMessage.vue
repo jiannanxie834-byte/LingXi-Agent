@@ -215,7 +215,7 @@ const handleCardClick = (card) => {
   gap: 12px;
 }
 
-/* 🌟 核心：如果是用户消息，反转 flex 方向，让头像和气泡靠右！ */
+/* 用户消息靠右显示 */
 .is-user {
   flex-direction: row-reverse;
 }

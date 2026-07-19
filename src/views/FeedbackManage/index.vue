@@ -60,14 +60,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-// 引入活接口
+// 反馈管理接口
 import { getAllFeedbackAPI, processFeedbackAPI, deleteFeedbackAPI } from '@/api/admin'
 
 const loading = ref(false)
 const feedbackList = ref([])
 const feedbackTableKey = ref(0)
 
-// 1. 核心：从后端拉取全量用户反馈
+// 加载用户反馈
 const fetchFeedbacks = async () => {
   loading.value = true
   try {
@@ -83,7 +83,7 @@ const fetchFeedbacks = async () => {
   }
 }
 
-// 2. 核心：响应管理员点击【处理】
+// 处理反馈
 const handleProcess = async (row) => {
   try {
     const res = await processFeedbackAPI(row.id)
@@ -97,7 +97,7 @@ const handleProcess = async (row) => {
   }
 }
 
-// 3. 核心：响应管理员点击【删除】
+// 删除反馈
 const handleDelete = (row) => {
   ElMessageBox.confirm(`确定要删除这条来自 [${row.username}] 的反馈吗？`, '提示', {
     confirmButtonText: '确定删除',

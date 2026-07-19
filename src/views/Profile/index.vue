@@ -234,10 +234,10 @@
           
           <div v-else class="empty-advice-placeholder">
             <div class="empty-tip-alert-box">
-               <strong>小提示：</strong>这里空空如也，快去和你的学习小助手开启你的学习之路吧~
+               <strong>学习建议：</strong>完成一次学习对话后，这里会展示基于画像的学习建议。
             </div>
             <el-button type="primary" round size="large" class="quick-chat-btn" @click="router.push('/')">
-               立即呼叫 AI 学习小助手
+               开始学习对话
             </el-button>
           </div>
         </el-card>
@@ -246,7 +246,7 @@
     </div>
 
     <el-dialog v-model="feedbackVisible" title="提交问题反馈" width="400px" destroy-on-close>
-      <el-input v-model="feedbackContent" type="textarea" :rows="4" placeholder="说出你的吐槽或优化建议..." />
+      <el-input v-model="feedbackContent" type="textarea" :rows="4" placeholder="请描述问题或改进建议" />
       <template #footer>
         <el-button @click="feedbackVisible = false">取消</el-button>
         <el-button type="primary" @click="submitFeedback">提交反馈</el-button>
@@ -325,7 +325,7 @@ const buildAvatarDataUrl = async (rawFile) => {
   return canvas.toDataURL('image/jpeg', 0.86)
 }
 
-// =================  个人资料全栈更新内核  =================
+// =================  个人资料更新  =================
 const profileVisible = ref(false)
 const profileForm = ref({
   username: '',
@@ -336,7 +336,7 @@ const profileForm = ref({
 })
 const isChangingPassword = ref(false)
 
-// 点击“修改资料”按钮：开箱，并执行标准的数据流回显
+// 打开资料编辑对话框并回填当前信息
 const openEditDialog = () => {
   isChangingPassword.value = false
   profileForm.value = {
@@ -389,7 +389,7 @@ const handleUpdateProfile = async () => {
     const res = await updateProfileAPI(payload)
     
     if (res && res.code === 200) {
-      ElMessage.success('资料同步云端成功！')
+      ElMessage.success('个人资料已保存')
       
       userStore.updateNickname(res.data.nickname)
       userStore.updateBio(res.data.bio)
@@ -616,7 +616,7 @@ const profileUpdateText = computed(() => {
   return `更新于${monthDay}`
 })
 
-// =================  快捷轻量级内联更新  =================
+// =================  资料快捷更新  =================
 const isEditingBio = ref(false)
 const inputBio = ref('')
 const bioInputRef = ref(null)
@@ -629,7 +629,7 @@ const startEditBio = () => {
   })
 }
 
-// 内联快捷保存个签：同样后端接口保持一致性
+// 保存个性签名
 const saveBio = async () => {
   isEditingBio.value = false
   if (inputBio.value.trim() === userStore.bio) return
@@ -642,14 +642,14 @@ const saveBio = async () => {
     })
     if (res && res.code === 200) {
       userStore.updateBio(res.data.bio)
-      ElMessage.success('个签已同步至云端！')
+      ElMessage.success('个性签名已保存')
     }
   } catch (err) {
     console.error(err)
   }
 }
 
-// 头像快捷本地上传更换：同样后端
+// 上传并保存头像
 const handleAvatarChange = async (file) => {
   if (avatarSaving.value) return
   avatarSaving.value = true
@@ -663,7 +663,7 @@ const handleAvatarChange = async (file) => {
     })
     if (res && res.code === 200) {
       userStore.updateAvatar(res.data.avatar)
-      ElMessage.success('头像已实时存盘！')
+      ElMessage.success('头像已保存')
     }
   } catch (err) {
     console.error(err)
@@ -685,7 +685,7 @@ const submitFeedback = async () => {
       content: feedbackContent.value
     })
     if (!res || res.code === 200) {
-      ElMessage.success(res?.message || '反馈提交成功！系统已实时呈递给最高管理员。') 
+      ElMessage.success(res?.message || '反馈提交成功，管理员将在后台处理')
       feedbackContent.value = ''
       feedbackVisible.value = false
     } else {

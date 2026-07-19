@@ -101,7 +101,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
-import { useUserStore } from '@/stores/user' // 🌟 引入 Pinia
+import { useUserStore } from '@/stores/user'
 import {
   getSystemMessagesAPI,
   getUnreadMessageCountAPI,
@@ -111,7 +111,7 @@ import {
 
 const router = useRouter()
 const route = useRoute()
-const userStore = useUserStore() // 🌟 实例化 Pinia Store
+const userStore = useUserStore()
 
 const currentPath = computed(() => route.path)
 const displayName = computed(() => userStore.nickname || userStore.username || '用户')

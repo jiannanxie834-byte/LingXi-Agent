@@ -7,7 +7,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import { sanitizePublicText } from '@/utils/publicContent'
-// 🌟 引入极其极客的深色代码高亮主题
+// 代码高亮主题
 import 'highlight.js/styles/github-dark.css' 
 
 // 接收父组件（聊天气泡）传进来的原始 Markdown 文本
@@ -281,7 +281,7 @@ const md = new MarkdownIt({
   }
 })
 
-// 监听 content 的变化，自动重新渲染（完美适配后续的 AI 流式输出）
+// content 更新时重新渲染
 const renderedHtml = computed(() => {
   return md.render(normalizeMermaidContent(sanitizePublicText(props.content)))
 })
@@ -313,7 +313,7 @@ onMounted(renderMermaid)
 </script>
 
 <style scoped>
-/* 微信/Kimi 风格的排版基调 */
+/* Markdown 排版基调 */
 .markdown-body {
   font-size: 15px;
   line-height: 1.6;

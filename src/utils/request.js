@@ -8,10 +8,10 @@ const service = axios.create({
   timeout: 120000 // AI 生成和资源规划可能需要等待大模型返回
 })
 
-// 2. 请求拦截器：发请求之前，自动在请求头里带上 Token
+// 2. 请求拦截器：自动附加 Token
 service.interceptors.request.use(
   config => {
-    // 🌟 核心修复：去正确的柜子（sessionStorage）里拿 Token
+    // 登录信息保存在 sessionStorage
     const token = sessionStorage.getItem('token')
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`
@@ -23,12 +23,12 @@ service.interceptors.request.use(
   }
 )
 
-// 3. 响应拦截器：统一剥壳与全局错误处理 (咱们刚刚打磨的终极版)
+// 3. 响应拦截器：统一处理业务响应与网络错误
 service.interceptors.response.use(
   response => {
     const res = response.data
 
-    // 只要后端返回 200，说明业务成功，原封不动把大包裹还给组件！
+    // 业务成功时返回经过公开字段过滤的数据
     if (res.code === 200) {
       return sanitizePublicPayload(res)
     } else {

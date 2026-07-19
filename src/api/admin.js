@@ -15,7 +15,7 @@ export const rejectResourceAPI = (id, comment = '') => request({ url: '/admin/re
 export const reopenResourceAPI = (id, comment = '') => request({ url: '/admin/resources/reopen', method: 'post', data: { id, comment } })
 export const updateResourceCommentAPI = (id, comment = '') => request({ url: '/admin/resources/comment', method: 'post', data: { id, comment } })
 
-// 反馈管理（一键复活你的按钮事件）
+// 反馈管理
 export const getAllFeedbackAPI = () => request({ url: '/admin/feedback/all', method: 'get' })
 export const processFeedbackAPI = (id) => request({ url: '/admin/feedback/process', method: 'post', data: { id } })
 export const deleteFeedbackAPI = (id) => request({ url: '/admin/feedback/delete', method: 'post', data: { id } })
